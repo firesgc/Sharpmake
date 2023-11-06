@@ -322,22 +322,14 @@ namespace Sharpmake
                 AppleApp,
 
                 /// <summary>
-                /// The output is an iOS app.
+                /// The output is an Apple (macOS|iOS|tvOS|watchOS) framework (i.e. a Bundle of DLL (dylib) and Headers).
                 /// </summary>
-                [Obsolete("'IosApp' has been deprecated, please use 'AppleApp' instead", error: false)]
-                IosApp = AppleApp,
+                AppleFramework,
 
                 /// <summary>
-                /// The output is a tvOS app.
+                /// The output is an Apple (macOS|iOS|tvOS|watchOS) Bundle (i.e. kind of equivalent to DLL (dylib)).
                 /// </summary>
-                [Obsolete("'TvosApp' has been deprecated, please use 'AppleApp' instead", error: false)]
-                TvosApp = AppleApp,
-
-                /// <summary>
-                /// The output is a watchOS app.
-                /// </summary>
-                [Obsolete("'WatchosApp' has been deprecated, please use 'AppleApp' instead", error: false)]
-                WatchosApp = AppleApp,
+                AppleBundle,
 
                 /// <summary>
                 /// The output is an iOS test bundle.
@@ -545,6 +537,22 @@ namespace Sharpmake
             /// </para>
             /// </remarks>
             public bool ExportAdditionalLibrariesEvenForStaticLib = false;
+
+            /// <summary>
+            /// Setting this boolean to true forces Sharpmake to bypass the additional dependencies prefix added normally
+            /// on libraries (-l{...}, or lib{...}.a).
+            /// </summary>
+            /// <remarks>
+            /// Since Sharpmake handles all dependencies, using an <c>AdditionalDependencies</c> field in
+            /// your project as librairies, it is impossible to add other dependencies like externally built objects
+            /// (i.e. *.asm files build externally as *.o). When this is the case, bypassing the prefixing can allow us
+            /// more flexibility on our build pipeline.
+            /// <para>
+            /// The default is <c>false</c>. Set this boolean to <c>true</c> to make Sharpmake skip the name mangling of
+            /// the additional dependencies.
+            /// </para>
+            /// </remarks>
+            public bool BypassAdditionalDependenciesPrefix = false;
 
             /// <summary>
             /// Gets or sets the name of the project, as viewed by the configuration.
@@ -782,6 +790,16 @@ namespace Sharpmake
             public Strings SourceFilesCompileAsCPPRegex = new Strings();
 
             /// <summary>
+            /// Source files that match this regex will be compiled as ObjC Files.
+            /// </summary>
+            public Strings SourceFilesCompileAsObjCRegex = new Strings();
+
+            /// <summary>
+            /// Source files that match this regex will be compiled as ObjCPP Files.
+            /// </summary>
+            public Strings SourceFilesCompileAsObjCPPRegex = new Strings();
+
+            /// <summary>
             /// Source files that match this regex will be compiled as CLR Files.
             /// </summary>
             public Strings SourceFilesCompileAsCLRRegex = new Strings();
@@ -843,6 +861,14 @@ namespace Sharpmake
             /// </summary>
             public OrderableStrings ResourceIncludePrivatePaths = new OrderableStrings();
             #endregion
+
+            /// <summary>
+            /// Include paths for Microsoft Macro Assembler compilation.
+            /// </summary>
+            /// <remarks>
+            /// The maximum number of these paths is 10.
+            /// </remarks>
+            public OrderableStrings AssemblyIncludePaths = new OrderableStrings();
 
             /// <summary>
             /// Gets a list of compiler options to send when calling the compiler.
@@ -1162,7 +1188,7 @@ namespace Sharpmake
             public OrderableStrings LibraryFiles = new OrderableStrings();
 
             /// <summary>
-            /// Gets a list of the Frameworks to link to for Xcode project.
+            /// Gets a list of the System Frameworks to link to for Xcode project.
             /// </summary>
             private OrderableStrings _XcodeSystemFrameworks = null;
             public OrderableStrings XcodeSystemFrameworks
@@ -1175,7 +1201,7 @@ namespace Sharpmake
                     }
                     return _XcodeSystemFrameworks;
                 }
-                set { _XcodeSystemFrameworks = value; }
+                private set { _XcodeSystemFrameworks = value; }
             }
 
             private OrderableStrings _XcodeDependenciesSystemFrameworks = null;
@@ -1189,7 +1215,156 @@ namespace Sharpmake
                     }
                     return _XcodeDependenciesSystemFrameworks;
                 }
-                private set { }
+            }
+
+            /// <summary>
+            /// Gets a list of the Developer Frameworks to link to for Xcode project.
+            /// </summary>
+            private OrderableStrings _XcodeDeveloperFrameworks = null;
+            public OrderableStrings XcodeDeveloperFrameworks
+            {
+                get
+                {
+                    if (_XcodeDeveloperFrameworks == null)
+                    {
+                        _XcodeDeveloperFrameworks = new OrderableStrings();
+                    }
+                    return _XcodeDeveloperFrameworks;
+                }
+                private set { _XcodeDeveloperFrameworks = value; }
+            }
+
+            private OrderableStrings _XcodeDependenciesDeveloperFrameworks = null;
+            public OrderableStrings XcodeDependenciesDeveloperFrameworks
+            {
+                get
+                {
+                    if (_XcodeDependenciesDeveloperFrameworks == null)
+                    {
+                        _XcodeDependenciesDeveloperFrameworks = new OrderableStrings();
+                    }
+                    return _XcodeDependenciesDeveloperFrameworks;
+                }
+            }
+
+            /// <summary>
+            /// Gets a list of the User Frameworks to link to for Xcode project.
+            /// </summary>
+            private OrderableStrings _XcodeUserFrameworks = null;
+            public OrderableStrings XcodeUserFrameworks
+            {
+                get
+                {
+                    if (_XcodeUserFrameworks == null)
+                    {
+                        _XcodeUserFrameworks = new OrderableStrings();
+                    }
+                    return _XcodeUserFrameworks;
+                }
+                private set { _XcodeUserFrameworks = value; }
+            }
+
+            private OrderableStrings _XcodeDependenciesUserFrameworks = null;
+            public OrderableStrings XcodeDependenciesUserFrameworks
+            {
+                get
+                {
+                    if (_XcodeDependenciesUserFrameworks == null)
+                    {
+                        _XcodeDependenciesUserFrameworks = new OrderableStrings();
+                    }
+                    return _XcodeDependenciesUserFrameworks;
+                }
+            }
+
+            /// <summary>
+            /// Gets a list of the Frameworks to link to and to embed in application for Xcode project.
+            /// </summary>
+            private OrderableStrings _XcodeEmbeddedFrameworks = null;
+            public OrderableStrings XcodeEmbeddedFrameworks
+            {
+                get
+                {
+                    if (_XcodeEmbeddedFrameworks == null)
+                    {
+                        _XcodeEmbeddedFrameworks = new OrderableStrings();
+                    }
+                    return _XcodeEmbeddedFrameworks;
+                }
+                private set { _XcodeEmbeddedFrameworks = value; }
+            }
+
+            private OrderableStrings _XcodeDependenciesEmbeddedFrameworks = null;
+            public OrderableStrings XcodeDependenciesEmbeddedFrameworks
+            {
+                get
+                {
+                    if (_XcodeDependenciesEmbeddedFrameworks == null)
+                    {
+                        _XcodeDependenciesEmbeddedFrameworks = new OrderableStrings();
+                    }
+                    return _XcodeDependenciesEmbeddedFrameworks;
+                }
+            }
+
+            /// <summary>
+            /// Gets a list of the System Framework paths to link to for Xcode project.
+            /// </summary>
+            private OrderableStrings _XcodeSystemFrameworkPaths = null;
+            public OrderableStrings XcodeSystemFrameworkPaths
+            {
+                get
+                {
+                    if (_XcodeSystemFrameworkPaths == null)
+                    {
+                        _XcodeSystemFrameworkPaths = new OrderableStrings();
+                    }
+                    return _XcodeSystemFrameworkPaths;
+                }
+                private set { _XcodeSystemFrameworkPaths = value; }
+            }
+
+            private OrderableStrings _XcodeDependenciesSystemFrameworkPaths = null;
+            public OrderableStrings XcodeDependenciesSystemFrameworkPaths
+            {
+                get
+                {
+                    if (_XcodeDependenciesSystemFrameworkPaths == null)
+                    {
+                        _XcodeDependenciesSystemFrameworkPaths = new OrderableStrings();
+                    }
+                    return _XcodeDependenciesSystemFrameworkPaths;
+                }
+            }
+
+            /// <summary>
+            /// Gets a list of the Framework paths to link to for Xcode project.
+            /// </summary>
+            private OrderableStrings _XcodeFrameworkPaths = null;
+            public OrderableStrings XcodeFrameworkPaths
+            {
+                get
+                {
+                    if (_XcodeFrameworkPaths == null)
+                    {
+                        _XcodeFrameworkPaths = new OrderableStrings();
+                    }
+                    return _XcodeFrameworkPaths;
+                }
+                private set { _XcodeFrameworkPaths = value; }
+            }
+
+            private OrderableStrings _XcodeDependenciesFrameworkPaths = null;
+            public OrderableStrings XcodeDependenciesFrameworkPaths
+            {
+                get
+                {
+                    if (_XcodeDependenciesFrameworkPaths == null)
+                    {
+                        _XcodeDependenciesFrameworkPaths = new OrderableStrings();
+                    }
+                    return _XcodeDependenciesFrameworkPaths;
+                }
             }
 
             /// <summary>
@@ -1777,7 +1952,7 @@ namespace Sharpmake
             /// <summary>
             /// Gets the full file name of the target, without the path but with the prefix and suffix, and without the extension
             /// </summary>
-            public string TargetFileFullName { get; internal set; } = "[conf.TargetFilePlatformPrefix][conf.TargetFilePrefix][conf.TargetFileName][conf.TargetFileSuffix]";
+            public string TargetFileFullName { get; set; } = "[conf.TargetFilePlatformPrefix][conf.TargetFilePrefix][conf.TargetFileName][conf.TargetFileSuffix]";
 
             /// <summary>
             /// Gets or sets the project's full extension (ie: .dll, .self, .exe, .dlu).
@@ -1790,7 +1965,7 @@ namespace Sharpmake
             /// Gets the full file name of the target, without the path but with the suffix, and the extension
             /// and the prefix.
             /// </summary>
-            public string TargetFileFullNameWithExtension { get; internal set; } = "[conf.TargetFileFullName][conf.TargetFileFullExtension]";
+            public string TargetFileFullNameWithExtension = "[conf.TargetFileFullName][conf.TargetFileFullExtension]";
 
             /// <summary>
             /// Gets or sets the ordering index of the target when added as a library to another
@@ -2183,6 +2358,10 @@ namespace Sharpmake
                 set { }
             }
 
+            /// <summary>
+            /// Mark the configuration to be the default build configuration for XCode project
+            /// </summary>
+            public bool UseAsDefaultForXCode = false;
 
             // FastBuild configuration
             /// <summary>
@@ -2404,6 +2583,8 @@ namespace Sharpmake
 
             public Strings ResolvedSourceFilesWithCompileAsCOption = new Strings();
             public Strings ResolvedSourceFilesWithCompileAsCPPOption = new Strings();
+            public Strings ResolvedSourceFilesWithCompileAsObjCOption = new Strings();
+            public Strings ResolvedSourceFilesWithCompileAsObjCPPOption = new Strings();
             public Strings ResolvedSourceFilesWithCompileAsCLROption = new Strings();
             public Strings ResolvedSourceFilesWithCompileAsNonCLROption = new Strings();
             public Strings ResolvedSourceFilesWithCompileAsWinRTOption = new Strings();
@@ -2931,6 +3112,10 @@ namespace Sharpmake
             public Strings ForceUsingFiles = new Strings();
 
             public Strings CustomPropsFiles = new Strings();  // vs2010+ .props files
+            /// <summary>
+            /// CustomProperties for configuration level. Supported only in msbuild based targets(C++/C#)
+            /// </summary>
+            public Dictionary<string, string> CustomProperties = new Dictionary<string, string>();
             public Strings CustomTargetsFiles = new Strings();  // vs2010+ .targets files
 
             // NuGet packages (C# and visual studio c++ for now)
@@ -3093,11 +3278,6 @@ namespace Sharpmake
                 var visitingNodes = new Stack<Tuple<DependencyNode, PropagationSettings>>();
                 visitingNodes.Push(Tuple.Create(rootNode, new PropagationSettings(DependencySetting.Default, true, true, true, false)));
 
-                //backward compatible, systemframeworks might be added via options.
-                Strings xcodeSystemFrameworks = Sharpmake.Options.GetStrings<Options.XCode.Compiler.SystemFrameworks>(this);
-                if (xcodeSystemFrameworks.Count > 0)
-                    XcodeSystemFrameworks.AddRange(xcodeSystemFrameworks);
-
                 (IConfigurationTasks, Platform)? lastPlatformConfigurationTasks = null;
 
                 IConfigurationTasks GetConfigurationTasks(Platform platform)
@@ -3243,8 +3423,31 @@ namespace Sharpmake
                                         DependenciesForceUsingFiles.AddRange(dependency.ForceUsingFiles);
                                 }
 
-                                if ((dependency.Platform.Equals(Platform.mac) || dependency.Platform.Equals(Platform.ios)) && dependency.XcodeSystemFrameworks.Count > 0)
-                                    XcodeDependenciesSystemFrameworks.AddRange(dependency.XcodeSystemFrameworks);
+                                if (dependency.Platform.Equals(Platform.mac) ||
+                                    dependency.Platform.Equals(Platform.ios) ||
+                                    dependency.Platform.Equals(Platform.tvos) ||
+                                    dependency.Platform.Equals(Platform.watchos) ||
+                                    dependency.Platform.Equals(Platform.maccatalyst)
+                                )
+                                {
+                                    if (dependency.XcodeSystemFrameworks.Count > 0)
+                                        XcodeDependenciesSystemFrameworks.AddRange(dependency.XcodeSystemFrameworks);
+
+                                    if (dependency.XcodeDeveloperFrameworks.Count > 0)
+                                        XcodeDependenciesDeveloperFrameworks.AddRange(dependency.XcodeDeveloperFrameworks);
+
+                                    if (dependency.XcodeUserFrameworks.Count > 0)
+                                        XcodeDependenciesUserFrameworks.AddRange(dependency.XcodeUserFrameworks);
+
+                                    if (dependency.XcodeEmbeddedFrameworks.Count > 0)
+                                        XcodeDependenciesEmbeddedFrameworks.AddRange(dependency.XcodeEmbeddedFrameworks);
+
+                                    if (dependency.XcodeSystemFrameworkPaths.Count > 0)
+                                        XcodeDependenciesSystemFrameworkPaths.AddRange(dependency.XcodeSystemFrameworkPaths);
+
+                                    if (dependency.XcodeFrameworkPaths.Count > 0)
+                                        XcodeDependenciesFrameworkPaths.AddRange(dependency.XcodeFrameworkPaths);
+                                }
 
                                 // If our no-output project is just a build-order dependency, update the build order accordingly
                                 if (!dependencyOutputLib && isImmediate && dependencySetting == DependencySetting.OnlyBuildOrder && !isExport)
@@ -3252,6 +3455,8 @@ namespace Sharpmake
                             }
                             break;
                         case OutputType.Dll:
+                        case OutputType.AppleFramework:
+                        case OutputType.AppleBundle:
                             {
                                 var configTasks = GetConfigurationTasks(dependency.Platform);
 

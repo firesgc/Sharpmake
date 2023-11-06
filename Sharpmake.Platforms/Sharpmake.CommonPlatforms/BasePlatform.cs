@@ -180,6 +180,11 @@ namespace Sharpmake
             return GetResourceIncludePathsImpl(context);
         }
 
+        public IEnumerable<string> GetAssemblyIncludePaths(IGenerationContext context)
+        {
+            return GetAssemblyIncludePathsImpl(context);
+        }
+
         public virtual IEnumerable<string> GetCxUsingPath(IGenerationContext context)
         {
             yield break;
@@ -467,11 +472,12 @@ namespace Sharpmake
             yield break;
         }
 
-        public virtual void SetupPlatformLibraryOptions(ref string platformLibExtension, ref string platformOutputLibExtension, ref string platformPrefixExtension)
+        public virtual void SetupPlatformLibraryOptions(out string platformLibExtension, out string platformOutputLibExtension, out string platformPrefixExtension, out string platformLibPrefix)
         {
             platformLibExtension = ".lib";
-            platformOutputLibExtension = "";
+            platformOutputLibExtension = ".lib";
             platformPrefixExtension = string.Empty;
+            platformLibPrefix = string.Empty;
         }
 
         protected virtual string GetProjectLinkExecutableVcxprojTemplate()
@@ -522,6 +528,11 @@ namespace Sharpmake
             resourceIncludePaths.AddRange(context.Configuration.DependenciesResourceIncludePaths);
 
             return resourceIncludePaths;
+        }
+
+        protected virtual IEnumerable<string> GetAssemblyIncludePathsImpl(IGenerationContext context)
+        {
+            yield break;
         }
 
         #endregion

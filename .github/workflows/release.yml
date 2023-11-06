@@ -33,13 +33,13 @@ jobs:
 
     steps:
       - name: 'Checkout the repo'
-        uses: actions/checkout@v3.4.0
+        uses: actions/checkout@v4.1.1
         with:
           fetch-depth: 0
 
       - name: 'Generating changelog'
         shell: pwsh
-        run: .\Get-Changelog.ps1 ${{ github.ref_name }} > changelog.md
+        run: .github\Get-Changelog.ps1 ${{ github.ref_name }} > changelog.md
 
       - name: 'Download workflow artifacts'
         uses: actions/download-artifact@v3
@@ -57,7 +57,7 @@ jobs:
         working-directory: downloads
 
       - name: 'Create GitHub release'
-        uses: ncipollo/release-action@v1.12.0
+        uses: ncipollo/release-action@v1.13.0
         with:
           bodyFile: 'changelog.md'
           artifacts: 'downloads/Sharpmake-net6.0-*-${{ github.ref_name }}.zip'

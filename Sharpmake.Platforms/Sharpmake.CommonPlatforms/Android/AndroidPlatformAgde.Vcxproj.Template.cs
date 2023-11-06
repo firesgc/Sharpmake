@@ -20,25 +20,6 @@ namespace Sharpmake
     <PlatformToolset>Clang</PlatformToolset>
 ";
 
-            private const string _projectPropertySheets =
-@"  <ImportGroup Condition=""'$(Configuration)|$(Platform)'=='Debug|Android-arm64-v8a'"" Label=""PropertySheets"">
-    <Import Project = ""$(AdditionalVCTargetsPath)Platforms\Android-arm64-v8a\Platform.default.props"" />
-    <Import Project=""$(AdditionalVCTargetsPath)Platforms\Android-arm64-v8a\PlatformToolsets\Clang\Toolset.props"" />
-  </ImportGroup>
-  <ImportGroup Condition=""'$(Configuration)|$(Platform)'=='Debug|Android-armeabi-v7a'"" Label=""PropertySheets"">
-    <Import Project = ""$(AdditionalVCTargetsPath)Platforms\Android-armeabi-v7a\Platform.default.props"" />
-    <Import Project=""$(AdditionalVCTargetsPath)Platforms\Android-armeabi-v7a\PlatformToolsets\Clang\Toolset.props"" />
-  </ImportGroup>
-  <ImportGroup Condition=""'$(Configuration)|$(Platform)'=='Debug|Android-x86'"" Label=""PropertySheets"">
-    <Import Project = ""$(AdditionalVCTargetsPath)Platforms\Android-x86\Platform.default.props"" />
-    <Import Project=""$(AdditionalVCTargetsPath)Platforms\Android-x86\PlatformToolsets\Clang\Toolset.props"" />
-  </ImportGroup>
-  <ImportGroup Condition=""'$(Configuration)|$(Platform)'=='Debug|Android-x86_64'"" Label=""PropertySheets"">
-    <Import Project = ""$(AdditionalVCTargetsPath)Platforms\Android-x86_64\Platform.default.props"" />
-    <Import Project=""$(AdditionalVCTargetsPath)Platforms\Android-x86_64\PlatformToolsets\Clang\Toolset.props"" />
-  </ImportGroup>
-";
-
             private const string _projectConfigurationsGeneralTemplate =
 @"  <PropertyGroup Condition=""'$(Configuration)|$(Platform)'=='[conf.Name]|[platformName]'"" Label=""Configuration"">
     <ConfigurationType>[options.ConfigurationType]</ConfigurationType>
@@ -75,13 +56,15 @@ namespace Sharpmake
     <IncludePath>[options.IncludePath]</IncludePath>
     <LibraryPath>[options.LibraryPath]</LibraryPath>
     <ExcludePath>[options.ExcludePath]</ExcludePath>
-    <UseMultiToolTask>[options.UseMultiToolTask]</UseMultiToolTask>
+    <NativeBuildBackend>[options.NativeBuildBackend]</NativeBuildBackend>
     <AndroidEnablePackaging>[options.AndroidEnablePackaging]</AndroidEnablePackaging>
+    <SkipAndroidPackaging>[options.SkipAndroidPackaging]</SkipAndroidPackaging>
     <AndroidApplicationModule>[options.AndroidApplicationModule]</AndroidApplicationModule>
     <AndroidGradleBuildDir>[options.AndroidGradleBuildDir]</AndroidGradleBuildDir>
     <AndroidGradleBuildOutputDir>[options.AndroidGradleBuildIntermediateDir]</AndroidGradleBuildOutputDir>
     <AndroidExtraGradleArgs>[options.AndroidExtraGradleArgs]</AndroidExtraGradleArgs>
     <AndroidApkName>[options.AndroidApkName]</AndroidApkName>
+    <AndroidGradlePackageOutputName>[options.AndroidGradlePackageOutputName]</AndroidGradlePackageOutputName>
   </PropertyGroup>
 ";
 
@@ -96,7 +79,7 @@ namespace Sharpmake
       <PrecompiledHeader>[options.UsePrecompiledHeader]</PrecompiledHeader>
       <WarningLevel>[options.WarningLevel]</WarningLevel>
       <Optimization>[options.Optimization]</Optimization>
-      <PreprocessorDefinitions>[options.PreprocessorDefinitions];%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>[EscapeXML:options.PreprocessorDefinitions];%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>[options.AdditionalIncludeDirectories];%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ClangDebugInformationFormat>[options.ClangDebugInformationFormat]</ClangDebugInformationFormat>
       <LimitDebugInfo>[options.LimitDebugInfo]</LimitDebugInfo>
@@ -145,6 +128,7 @@ namespace Sharpmake
 @"    <Lib>
       <AdditionalOptions>[options.AdditionalLibrarianOptions]</AdditionalOptions>
       <OutputFile>[options.OutputFile]</OutputFile>
+      <NoWarnOnCreate>true</NoWarnOnCreate>
     </Lib>
 ";
         }

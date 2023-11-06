@@ -14,12 +14,19 @@ namespace Sharpmake
                             // Libraries
                             // ---------------------------
                             + ' [cmdLineOptions.AdditionalDependencies]'
-                            // SystemFrameworks
-                            //--------------------------
+                            // SystemFrameworks, DeveloperFrameworks, UserFrameworks and FrameworkPaths
+                            // -----------------------------------------------------------------------------
                             + ' [cmdLineOptions.SystemFrameworks]'
+                            + ' [cmdLineOptions.DeveloperFrameworks]'
+                            + ' [cmdLineOptions.UserFrameworks]'
+                            + ' [cmdLineOptions.EmbeddedFrameworks]'
+                            + ' [cmdLineOptions.LinkerSystemFrameworkPaths]'
+                            + ' [cmdLineOptions.LinkerFrameworkPaths]'
                             // Options
                             //--------
+                            + ' [cmdLineOptions.DeploymentTarget]'
                             + ' [cmdLineOptions.GenerateMapFile]'
+                            + ' [cmdLineOptions.DeadCodeStripping]'
                             // Additional linker options
                             //--------------------------
                             + ' [options.AdditionalLinkerOptions]'
@@ -34,13 +41,30 @@ namespace Sharpmake
             + ' [cmdLineOptions.PreprocessorDefinitions]'
             + ' [cmdLineOptions.StdLib]'
             + ' [cmdLineOptions.SDKRoot]'
-            + ' [options.ClangCppLanguageStandard]'
+            + ' [cmdLineOptions.DeploymentTarget]'
+            + ' [cmdLineOptions.CppLanguageStd]'
+            + ' [cmdLineOptions.CLanguageStd]'
+            + ' [cmdLineOptions.WarningReturnType]'
+            + ' [cmdLineOptions.RuntimeTypeInfo]'
+            + ' [cmdLineOptions.ClangEnableObjC_ARC]'
+            + ' [cmdLineOptions.ClangEnableObjC_Weak]'
+            + ' [cmdLineOptions.CppExceptions]'
+            + ' [cmdLineOptions.ObjCExceptions]'
+            + ' [cmdLineOptions.ObjCARCExceptions]'
 ";
 
         private const string _compilerExtraOptionsAdditional = @"
             // Additional compiler options
             //--------------------------
             + ' [options.AdditionalCompilerOptions]'
+            // SystemFrameworks, DeveloperFrameworks, UserFrameworks and FrameworkPaths
+            // ----------------------------------------------------------------------------
+            + ' [cmdLineOptions.SystemFrameworks]'
+            + ' [cmdLineOptions.DeveloperFrameworks]'
+            + ' [cmdLineOptions.UserFrameworks]'
+            + ' [cmdLineOptions.EmbeddedFrameworks]'
+            + ' [cmdLineOptions.CompilerSystemFrameworkPaths]'
+            + ' [cmdLineOptions.CompilerFrameworkPaths]'
 ";
 
         private const string _compilerOptimizationOptions =

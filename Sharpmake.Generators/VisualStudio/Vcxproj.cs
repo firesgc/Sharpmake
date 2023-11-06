@@ -144,7 +144,13 @@ namespace Sharpmake.Generators.VisualStudio
             GenerateImpl(context, generatedFiles, skipFiles);
         }
 
-        public static string FastBuildCustomArguments = "";
+        [Obsolete("Deprecated. Use `FastBuildSettings.FastBuildCustomArguments` instead.", error: false)]
+        public static string FastBuildCustomArguments
+        {
+            get { return FastBuildSettings.FastBuildCustomArguments; }
+            set { FastBuildSettings.FastBuildCustomArguments = value; }
+        }
+
         public const string ProjectExtension = ".vcxproj";
         private const string ProjectFilterExtension = ".filters";
         private const string CopyDependenciesExtension = "_runtimedependencies.txt";
@@ -558,8 +564,8 @@ namespace Sharpmake.Generators.VisualStudio
                             if (!string.IsNullOrEmpty(conf.FastBuildCustomArgs))
                                 fastBuildCommandLineOptions.Add(conf.FastBuildCustomArgs);
 
-                            if (!string.IsNullOrEmpty(FastBuildCustomArguments))
-                                fastBuildCommandLineOptions.Add(FastBuildCustomArguments);
+                            if (!string.IsNullOrEmpty(FastBuildSettings.FastBuildCustomArguments))
+                                fastBuildCommandLineOptions.Add(FastBuildSettings.FastBuildCustomArguments);
 
                             string commandLine = string.Join(" ", fastBuildCommandLineOptions);
 
@@ -583,6 +589,8 @@ namespace Sharpmake.Generators.VisualStudio
                         {
                             platformVcxproj.GenerateProjectConfigurationGeneral2(context, fileGenerator);
                         }
+
+                        VsProjCommon.WriteConfigurationsCustomProperties(conf, fileGenerator);
                     }
                 }
             }
@@ -803,6 +811,10 @@ namespace Sharpmake.Generators.VisualStudio
             var resourceIncludePaths = platformVcxproj.GetResourceIncludePaths(context);
             context.Options["AdditionalResourceIncludeDirectories"] = resourceIncludePaths.Any() ? Util.PathGetRelative(context.ProjectDirectory, resourceIncludePaths).JoinStrings(";") : FileGeneratorUtilities.RemoveLineTag;
 
+            // Fill Assembly include dirs
+            var assemblyIncludePaths = platformVcxproj.GetAssemblyIncludePaths(context);
+            context.Options["AdditionalAssemblyIncludeDirectories"] = assemblyIncludePaths.Any() ? Util.PathGetRelative(context.ProjectDirectory, assemblyIncludePaths).JoinStrings(";") : FileGeneratorUtilities.RemoveLineTag;
+
             // Fill using dirs
             Strings additionalUsingDirectories = Options.GetStrings<Options.Vc.Compiler.AdditionalUsingDirectories>(context.Configuration);
             additionalUsingDirectories.AddRange(context.Configuration.AdditionalUsingDirectories);
@@ -822,7 +834,7 @@ namespace Sharpmake.Generators.VisualStudio
 
             Strings ignoreSpecificLibraryNames = Options.GetStrings<Options.Vc.Linker.IgnoreSpecificLibraryNames>(context.Configuration);
             ignoreSpecificLibraryNames.ToLower();
-            ignoreSpecificLibraryNames.InsertSuffix(platformVcxproj.StaticLibraryFileFullExtension, true);
+            ignoreSpecificLibraryNames.InsertSuffix(platformVcxproj.StaticLibraryFileFullExtension, true, new[] { platformVcxproj.SharedLibraryFileFullExtension });
 
             context.Options["AdditionalDependencies"] = FileGeneratorUtilities.RemoveLineTag;
             context.Options["AdditionalLibraryDirectories"] = FileGeneratorUtilities.RemoveLineTag;
@@ -903,7 +915,7 @@ namespace Sharpmake.Generators.VisualStudio
                 string decoratedName = libraryFile;
                 string extension = Path.GetExtension(libraryFile).ToLowerInvariant();
 
-                if (extension != platformVcxproj.StaticLibraryFileFullExtension && extension != platformVcxproj.SharedLibraryFileFullExtension)
+                if (extension != platformVcxproj.StaticLibraryFileFullExtension && extension != platformVcxproj.SharedLibraryFileFullExtension && !context.Configuration.BypassAdditionalDependenciesPrefix)
                 {
                     decoratedName = libPrefix + libraryFile;
                     if (!string.IsNullOrEmpty(platformVcxproj.StaticLibraryFileFullExtension))

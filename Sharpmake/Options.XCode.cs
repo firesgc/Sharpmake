@@ -1,8 +1,12 @@
 // Copyright (c) Ubisoft. All Rights Reserved.
 // Licensed under the Apache 2.0 License. See LICENSE.md in the project root for license information.
 
+// reference for options: https://developer.apple.com/documentation/xcode/build-settings-reference
+
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace Sharpmake
 {
@@ -10,6 +14,16 @@ namespace Sharpmake
     {
         public static class XCode
         {
+            public static class Editor
+            {
+                public enum Indent
+                {
+                    [Default]
+                    Tabs,
+                    Spaces
+                }
+            };
+
             public static class Compiler
             {
                 public enum AlwaysSearchUserPaths
@@ -68,6 +82,13 @@ namespace Sharpmake
                     GNU11
                 }
 
+                public enum GenerateInfoPlist
+                {
+                    Enable,
+                    [Default]
+                    Disable
+                }
+
                 public class CodeSignEntitlements : StringOption
                 {
                     public CodeSignEntitlements(string value) : base(value)
@@ -82,10 +103,48 @@ namespace Sharpmake
                     }
                 }
 
+                public class ProductBundleDisplayName : StringOption
+                {
+                    public ProductBundleDisplayName(string value) : base(value) { }
+                }
+
                 public class ProductBundleIdentifier : StringOption
                 {
                     public ProductBundleIdentifier(string value) : base(value) { }
                 }
+
+                public class ProductBundleVersion : StringOption
+                {
+                    public ProductBundleVersion(string value) : base(value) { }
+                }
+
+                public class ProductBundleShortVersion : StringOption
+                {
+                    public ProductBundleShortVersion(string value) : base(value) { }
+                }
+
+                /// <summary>
+                /// Resolves to `INSTALL_PATH` in Xcode build settings
+                /// Allows to override the default INSTALL_PATH to set a custom Xcode macro value
+                /// e.g. `@rpath/../Frameworks` for MacOS Frameworks
+                /// or `@rpath` for dylibs
+                /// </summary>
+                public class ProductInstallPath : StringOption
+                {
+                    public ProductInstallPath(string value) : base(value) { }
+                }
+
+                /// <summary>
+                /// Resolves to `LD_RUNPATH_SEARCH_PATHS` in Xcode build settings
+                /// Allows to set paths for LD_RUNPATH_SEARCH_PATHS to set a custom Xcode macro value
+                /// </summary>
+                public class LdRunPaths : Strings
+                {
+                    public LdRunPaths(params string[] paths)
+                        : base(paths)
+                    { }
+                }
+
 
                 public enum EnableGpuFrameCaptureMode
                 {
@@ -109,6 +168,19 @@ namespace Sharpmake
                     GNU14,
                     GNU17,
                     GNU20
+                }
+
+                /// <summary>
+                /// Add buildSettings options as needed by Xcode project with swift code
+                /// 4_0, 4_2, 5_0 correspond to 4.0, 4.2, 5.0, the 3 options in Xcode 15 by Aug 2023, add more when needed
+                /// </summary>
+                public enum SwiftLanguageVersion
+                {
+                    [Default]
+                    Disable,
+                    SWIFT4_0,
+                    SWIFT4_2,
+                    SWIFT5_0
                 }
 
                 public enum DeadStrip
@@ -161,6 +233,7 @@ namespace Sharpmake
                     Disable
                 }
 
+                [Obsolete("Deprecated. Use `CppExceptions`, `ObjCExceptions`, or `ObjCARCExceptions` instead.", error: false)]
                 public enum Exceptions
                 {
                     [Default]
@@ -168,6 +241,27 @@ namespace Sharpmake
                     Enable,
                     EnableCpp,
                     EnableObjC,
+                }
+
+                public enum CppExceptions
+                {
+                    [Default]
+                    Disable,
+                    Enable
+                }
+
+                public enum ObjCExceptions
+                {
+                    [Default]
+                    Disable,
+                    Enable
+                }
+
+                public enum ObjCARCExceptions
+                {
+                    [Default]
+                    Disable,
+                    Enable
                 }
 
                 public class ExternalResourceFolders : Strings
@@ -198,6 +292,7 @@ namespace Sharpmake
                     { }
                 }
 
+                [Obsolete("Deprecated. Use `conf.XcodeSystemFrameworks` instead.", error: true)]
                 public class SystemFrameworks : Frameworks
                 {
                     public SystemFrameworks(params string[] frameworkNames)
@@ -205,6 +300,7 @@ namespace Sharpmake
                     { }
                 }
 
+                [Obsolete("Deprecated. Use `conf.XcodeUserFrameworks` instead.", error: true)]
                 public class UserFrameworks : Frameworks
                 {
                     public UserFrameworks(params string[] paths)
@@ -212,6 +308,7 @@ namespace Sharpmake
                     { }
                 }
 
+                [Obsolete("Deprecated. Use `conf.XcodeFrameworkPaths` instead.", error: true)]
                 public class FrameworkPaths : Strings
                 {
                     public FrameworkPaths(params string[] paths)
@@ -405,6 +502,84 @@ namespace Sharpmake
                     public AssetCatalogCompilerAppIconName(string value) : base(value)
                     {
                     }
+                }
+                public class AssetCatalogCompilerLaunchImageName : StringOption
+                {
+                    public AssetCatalogCompilerLaunchImageName(string value) : base(value)
+                    {
+                    }
+                }
+
+                public class AssetCatalogCompilerAlternateAppIconNames : Strings
+                {
+                    public AssetCatalogCompilerAlternateAppIconNames(params string[] values)
+                        : base(values)
+                    {
+                    }
+                }
+
+                public class AssetCatalogCompilerGlobalAccentColorName : StringOption
+                {
+                    public AssetCatalogCompilerGlobalAccentColorName(string value) : base(value)
+                    {
+                    }
+                }
+
+                public class AssetCatalogCompilerWidgetBackgroundColorName : StringOption
+                {
+                    public AssetCatalogCompilerWidgetBackgroundColorName(string value) : base(value)
+                    {
+                    }
+                }
+
+                public enum AssetCatalogCompilerIncludeAllAppIconAssets
+                {
+                    [Default]
+                    Disable,
+                    Enable
+                }
+
+                public enum AssetCatalogCompilerIncludeInfoPlistLocalizations
+                {
+                    [Default]
+                    Disable,
+                    Enable
+                }
+
+                public enum AssetCatalogCompilerOptimization
+                {
+                    Time,
+                    [Default]
+                    Space
+                }
+
+                public enum AssetCatalogCompilerStandaloneIconBehavior
+                {
+                    [Default]
+                    Default,
+                    None,
+                    All
+                }
+
+                public enum AssetCatalogCompilerSkipAppStoreDeployment
+                {
+                    [Default]
+                    Disable,
+                    Enable
+                }
+
+                public enum AssetCatalogNotices
+                {
+                    [Default]
+                    Disable,
+                    Enable
+                }
+
+                public enum AssetCatalogWarnings
+                {
+                    [Default]
+                    Disable,
+                    Enable
                 }
 
                 public enum Testability
@@ -613,6 +788,317 @@ namespace Sharpmake
                     [Default]
                     Disable
                 }
+
+                public enum SupportsMaccatalyst
+                {
+                    Enable,
+                    Disable
+                }
+
+                public enum SupportsMacDesignedForIphoneIpad
+                {
+                    Enable,
+                    Disable
+                }
+
+                public enum SwiftEmitLocStrings
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum MetalFastMath
+                {
+                    Disable,
+                    [Default]
+                    Enable
+                }
+            }
+
+            /// <summary>
+            /// This exposes the Info Propery List (Info.plist) settings to Sharpmake
+            /// These settings have their own group for better grouping
+            /// https://developer.apple.com/documentation/bundleresources?language=objc
+            /// Option class naming follows their equivalent key.
+            /// </summary>
+            public static class InfoPlist
+            {
+                public class CFBundleSpokenName : StringOption
+                {
+                    public CFBundleSpokenName(string value)
+                        : base(value) { }
+                }
+
+                public class CFBundleDevelopmentRegion : StringOption
+                {
+                    public CFBundleDevelopmentRegion(string value)
+                        : base(value) { }
+                }
+
+                public class CFBundleExecutable : StringOption
+                {
+                    public CFBundleExecutable(string value)
+                        : base(value) { }
+                }
+
+                public class CFBundleLocalizations : Strings
+                {
+                    public CFBundleLocalizations(params string[] values)
+                        : base(values) { }
+                }
+
+                public enum NSHighResolutionCapable
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum CFBundleAllowMixedLocalizations
+                {
+                    Disable,
+                    Enable
+                }
+
+                /// --- macOS specific settings ---
+                public class NSHumanReadableCopyright : StringOption
+                {
+                    public NSHumanReadableCopyright(string value)
+                        : base(value) { }
+                }
+
+                public class NSMainStoryboardFile : StringOption
+                {
+                    public NSMainStoryboardFile(string value)
+                        : base(value) { }
+                }
+
+                public class NSMainNibFile : StringOption
+                {
+                    public NSMainNibFile(string value)
+                        : base(value) { }
+                }
+
+                public class NSPrefPaneIconFile : StringOption
+                {
+                    public NSPrefPaneIconFile(string value)
+                        : base(value) { }
+                }
+
+                public class NSPrefPaneIconLabel : StringOption
+                {
+                    public NSPrefPaneIconLabel(string value)
+                        : base(value) { }
+                }
+
+                public class NSPrincipalClass : StringOption
+                {
+                    public NSPrincipalClass(string value)
+                        : base(value) { }
+                }
+
+                public enum LSRequiresNativeExecution
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum LSMultipleInstancesProhibited
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum NSSupportsAutomaticGraphicsSwitching
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum NSPrefersDisplaySafeAreaCompatibilityMode
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum UISupportsTrueScreenSizeOnMac
+                {
+                    Disable,
+                    Enable
+                }
+
+                /// --- iOS specific settings ---
+                public enum LSRequiresIPhoneOS
+                {
+                    Disable,
+                    Enable
+                }
+
+                public class UIRequiredDeviceCapabilities : Strings
+                {
+                    public UIRequiredDeviceCapabilities(params string[] paths)
+                        : base(paths)
+                    {
+                    }
+                }
+
+                public class UIMainStoryboardFile : StringOption
+                {
+                    public UIMainStoryboardFile(string value)
+                        : base(value) { }
+                }
+
+                public class UILaunchStoryboardName : StringOption
+                {
+                    public UILaunchStoryboardName(string value)
+                        : base(value) { }
+                }
+
+                public class CFBundleIconFile : StringOption
+                {
+                    public CFBundleIconFile(string value)
+                        : base(value) { }
+                }
+
+                public class CFBundleIconFiles : Strings
+                {
+                    public CFBundleIconFiles(params string[] paths)
+                        : base(paths)
+                    {
+                    }
+                }
+
+                public class CFBundleIconName : StringOption
+                {
+                    public CFBundleIconName(string value)
+                        : base(value) { }
+                }
+
+                public enum UIPrerenderedIcon
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum UIInterfaceOrientation
+                {
+                    UIInterfaceOrientationPortrait,
+                    UIInterfaceOrientationPortraitUpsideDown,
+                    UIInterfaceOrientationLandscapeLeft,
+                    UIInterfaceOrientationLandscapeRight,
+                }
+
+                public class UIInterfaceOrientation_iPhone : WithArgOption<UIInterfaceOrientation>
+                {
+                    public UIInterfaceOrientation_iPhone(UIInterfaceOrientation value)
+                       : base(value) { }
+                }
+
+                public class UIInterfaceOrientation_iPad : WithArgOption<UIInterfaceOrientation>
+                {
+                    public UIInterfaceOrientation_iPad(UIInterfaceOrientation value)
+                       : base(value) { }
+                }
+
+                public class UISupportedInterfaceOrientations : UniqueList<UIInterfaceOrientation>
+                {
+                    public UISupportedInterfaceOrientations(params UIInterfaceOrientation[] values)
+                        : base(EqualityComparer<UIInterfaceOrientation>.Default, values) { }
+
+                    public override string ToString()
+                    {
+                        StringBuilder builder = new StringBuilder(Count * 128);
+                        bool first = true;
+                        foreach (UIInterfaceOrientation value in _hash)
+                        {
+                            if (!first)
+                                builder.Append(' ');
+                            else
+                                first = false;
+
+                            builder.Append(value.ToString());
+                        }
+
+                        if (_hash.Count > 1)
+                            return @$"""{builder.ToString()}""";
+
+                        return builder.ToString();
+                    }
+                }
+
+                public class UISupportedInterfaceOrientations_iPhone : UISupportedInterfaceOrientations
+                {
+                    public UISupportedInterfaceOrientations_iPhone(params UIInterfaceOrientation[] values)
+                        : base(values) { }
+
+                }
+
+                public class UISupportedInterfaceOrientations_iPad : UISupportedInterfaceOrientations
+                {
+                    public UISupportedInterfaceOrientations_iPad(params UIInterfaceOrientation[] values)
+                        : base(values) { }
+
+                }
+
+                public enum UIUserInterfaceStyle
+                {
+                    Automatic,
+                    Light,
+                    Dark,
+                }
+
+                public enum UIWhitePointAdaptivityStyle
+                {
+                    UIWhitePointAdaptivityStyleStandard,
+                    UIWhitePointAdaptivityStyleReading,
+                    UIWhitePointAdaptivityStylePhoto,
+                    UIWhitePointAdaptivityStyleVideo,
+                    UIWhitePointAdaptivityStyleGame,
+                }
+
+                public enum UIRequiresFullScreen
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum UIStatusBarHidden
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum UIViewControllerBasedStatusBarAppearance
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum UIStatusBarStyle
+                {
+                    UIStatusBarStyleDefault,
+                    UIStatusBarStyleLightContent,
+                    UIStatusBarStyleDarkContent,
+                }
+
+                public enum UIApplicationSupportsIndirectInputEvents
+                {
+                    Disable,
+                    Enable
+                }
+
+                public enum UIRequiresPersistentWiFi
+                {
+                    Disable,
+                    Enable
+                }
+
+                /// --- tvOS specific settings ---
+                public enum UIAppSupportsHDR
+                {
+                    Disable,
+                    Enable
+                }
+
             }
 
             public static class Linker
@@ -643,6 +1129,44 @@ namespace Sharpmake
                 {
                     public PrelinkLibraries(string path)
                        : base(path)
+                    {
+                    }
+                }
+
+                /// <summary>
+                /// When enable, "-ObjC" will be added into LinkerOptions, then linker Loads all members of static archive libraries that implement an Objective-C class or category.
+                /// </summary>
+                public enum LinkObjC
+                {
+                    Disable,
+                    [Default]
+                    Enable
+                }
+            }
+
+            /// <summary>
+            /// This exposes the scheme settings to Sharpmake
+            /// These settings have their own group for better grouping
+            /// https://developer.apple.com/documentation/xcode/customizing-the-build-schemes-for-a-project
+            /// Option class naming follows their equivalent key.
+            /// </summary>
+            public static class Scheme
+            {
+                public enum MetalAPIValidation
+                {
+                    [Default]
+                    Enable,
+                    Disable
+                }              
+
+                /// <summary>
+                /// Resolve to <CommandLineArguments> in xcscheme, 
+                ///  for configuring 'Arguments Passed On Launch' as 'Edit Scheme' in XCode can do
+                /// </summary>
+                public class DebugArguments: List<string>
+                {
+                    public DebugArguments(List<string> args)
+                        : base(args) 
                     {
                     }
                 }

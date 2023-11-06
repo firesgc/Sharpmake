@@ -10,6 +10,8 @@ namespace Sharpmake.Generators.Apple
 {
     public static class XCodeUtil
     {
+        public const string CustompropertiesFilename = "customproperties.xml";
+
         public static string XCodeFormatSingleItem(string item, bool forceQuotes = false)
         {
             if (forceQuotes || item.Contains(Util.DoubleQuotes) || item.Contains(' '))
@@ -46,14 +48,18 @@ namespace Sharpmake.Generators.Apple
             return strBuilder.ToString();
         }
 
-        public static string ResolveProjectPaths(Project project, string stringToResolve)
+        public static string ResolveProjectVariable(Project project, string stringToResolve)
         {
             Resolver resolver = new Resolver();
             using (resolver.NewScopedParameter("project", project))
             {
-                string resolvedString = resolver.Resolve(stringToResolve);
-                return Util.SimplifyPath(resolvedString);
+                return resolver.Resolve(stringToResolve);
             }
+        }
+
+        public static string ResolveProjectPaths(Project project, string stringToResolve)
+        {
+            return Util.SimplifyPath(ResolveProjectVariable(project, stringToResolve));
         }
 
         public static void ResolveProjectPaths(Project project, Strings stringsToResolve)
@@ -62,6 +68,17 @@ namespace Sharpmake.Generators.Apple
             {
                 string newValue = ResolveProjectPaths(project, value);
                 stringsToResolve.UpdateValue(value, newValue);
+            }
+        }
+
+        public static void ResolveProjectPaths(Project project, OrderableStrings stringsToResolve)
+        {
+            var count = stringsToResolve.Count;
+            for (var i = 0; i < count; i++)
+            {
+                string value = stringsToResolve[i];
+                string newValue = ResolveProjectPaths(project, value);
+                stringsToResolve[i] = newValue;
             }
         }
     }

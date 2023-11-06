@@ -46,10 +46,7 @@ namespace Sharpmake.Generators.VisualStudio
                 PlatformDescriptor = PlatformRegistry.Get<IPlatformDescriptor>(conf.Platform);
                 PlatformVcxproj = PlatformRegistry.Get<IPlatformVcxproj>(conf.Platform);
 
-                string platformLibraryExtension = ".lib";
-                string platformOutputLibraryExtension = ".lib";
-                string platformPrefixExtension = string.Empty;
-                PlatformVcxproj.SetupPlatformLibraryOptions(ref platformLibraryExtension, ref platformOutputLibraryExtension, ref platformPrefixExtension);
+                PlatformVcxproj.SetupPlatformLibraryOptions(out var platformLibraryExtension, out var platformOutputLibraryExtension, out var platformPrefixExtension, out var platformLibPrefix);
 
                 PlatformLibraryExtension = platformLibraryExtension;
                 PlatformOutputLibraryExtension = platformOutputLibraryExtension;
@@ -241,7 +238,7 @@ namespace Sharpmake.Generators.VisualStudio
             if (!context.Configuration.IsFastBuild)
             {
                 // support of PCH requires them to be set as ForceIncludes with ClangCl
-                if (useClangCl)
+                if (useClangCl && !string.IsNullOrEmpty(context.Configuration.PrecompHeader))
                 {
                     forcedIncludes.Add(context.Configuration.PrecompHeader);
                 }
@@ -1312,6 +1309,8 @@ namespace Sharpmake.Generators.VisualStudio
                 case Project.Configuration.OutputType.DotNetConsoleApp:
                 case Project.Configuration.OutputType.DotNetWindowsApp:
                 case Project.Configuration.OutputType.AppleApp:
+                case Project.Configuration.OutputType.AppleFramework:
+                case Project.Configuration.OutputType.AppleBundle:
                 case Project.Configuration.OutputType.IosTestBundle:
                     context.Options["OutputFile"] = optionsContext.OutputDirectoryRelative + Util.WindowsSeparator + context.Configuration.TargetFileFullNameWithExtension;
                     if (context.Configuration.Output == Project.Configuration.OutputType.Dll)

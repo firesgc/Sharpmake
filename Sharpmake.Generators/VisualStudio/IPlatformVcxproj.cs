@@ -54,6 +54,7 @@ namespace Sharpmake.Generators.VisualStudio
         IEnumerable<string> GetPlatformIncludePaths(IGenerationContext context);
         IEnumerable<IncludeWithPrefix> GetPlatformIncludePathsWithPrefix(IGenerationContext context);
         IEnumerable<string> GetResourceIncludePaths(IGenerationContext context);
+        IEnumerable<string> GetAssemblyIncludePaths(IGenerationContext context);
 
         IEnumerable<string> GetCxUsingPath(IGenerationContext context);
 
@@ -99,6 +100,6 @@ namespace Sharpmake.Generators.VisualStudio
         IEnumerable<Tuple<string, List<Vcxproj.ProjectFile>>> GetPlatformFileLists(IVcxprojGenerationContext context);
 
         // TODO: Refactor this.
-        void SetupPlatformLibraryOptions(ref string platformLibExtension, ref string platformOutputLibExtension, ref string platformPrefixExtension);
+        void SetupPlatformLibraryOptions(out string platformLibExtension, out string platformOutputLibExtension, out string platformPrefixExtension, out string platformLibPrefix);
     }
 }

@@ -59,6 +59,11 @@ namespace Sharpmake
         public static readonly IList<string> AdditionalGlobalSettings = new List<string>();
 
         /// <summary>
+        /// Additional environment variables to add to the global environment settings node (key, value)
+        /// </summary>
+        public static readonly IDictionary<string, string> AdditionalGlobalEnvironmentVariables = new Dictionary<string, string>();
+
+        /// <summary>
         /// Path to the fastbuild plugin dll if any. This typically will be the path to the Ubisoft asset store plugin DLL but could be any other compatible implementation.
         /// CachePath must also be set to an appropriate url.
         /// </summary>
@@ -195,5 +200,10 @@ namespace Sharpmake
         /// Additional custom property groups. Only those referred will be written to the bff files.
         /// </summary>
         public static readonly IDictionary<string, List<string>> AdditionalPropertyGroups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Custom arguments pass to fastbuild
+        /// </summary>
+        public static string FastBuildCustomArguments = null;
     }
 }

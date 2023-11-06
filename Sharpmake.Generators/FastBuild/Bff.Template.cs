@@ -69,6 +69,7 @@ Settings
         ""USERPROFILE=$USERPROFILE$"",
         ""SystemRoot=[fastBuildSystemRoot]""
         ""PATH=[fastBuildPATH]""
+[envAdditionalVariables]
     }
 #endif[envRemoveGuards]
 ";
@@ -80,6 +81,7 @@ Settings
     {
         ""TMPDIR=$TMPDIR$"",
         ""PATH=[fastBuildPATH]""
+[envAdditionalVariables]
     }
 #endif[envRemoveGuards]
 ";
@@ -321,6 +323,7 @@ Compiler( '[fastBuildMasmCompilerName]' )
 
                 public static string MasmCompilerExtraOptions = @"
     .CompilerExtraOptions   = ''
+            + ' [cmdLineOptions.AdditionalAssemblyIncludeDirectories]'
             + ' /nologo'
             + ' /W3'
             + ' /errorReport:queue'

@@ -113,6 +113,7 @@ namespace Sharpmake.Generators.VisualStudio
     <Nullable>[options.Nullable]</Nullable>
     <Platforms>[options.Platforms]</Platforms>
     <Configurations>[options.Configurations]</Configurations>
+    <PublishAot>[options.PublishAot]</PublishAot>
   </PropertyGroup>
 ";
 
@@ -120,8 +121,7 @@ namespace Sharpmake.Generators.VisualStudio
                 public const string MultiFrameworkProjectConfigurationCondition = "'$(Configuration)|$(Platform)|$(TargetFramework)'=='[conf.Name]|[platformName]|[targetFramework]'";
 
                 public static string ProjectConfigurationsGeneral =
-@"  <PropertyGroup Condition=""[projectConfigurationCondition]"">
-    <PlatformTarget>[platformName]</PlatformTarget>
+@"    <PlatformTarget>[platformName]</PlatformTarget>
     <DebugSymbols>[options.DebugSymbols]</DebugSymbols>
     <DebugType>[options.DebugType]</DebugType>
     <Optimize>[options.Optimize]</Optimize>
@@ -148,7 +148,6 @@ namespace Sharpmake.Generators.VisualStudio
     <CopyVsixExtensionFiles>[options.CopyVsixExtensionFiles]</CopyVsixExtensionFiles>
     <CopyVsixExtensionLocation>[options.CopyVsixExtensionLocation]</CopyVsixExtensionLocation>
     <ProduceReferenceAssembly>[options.ProduceReferenceAssembly]</ProduceReferenceAssembly>
-  </PropertyGroup>
 ";
 
                 public static string ImportProjectItemSimple =
@@ -306,7 +305,9 @@ namespace Sharpmake.Generators.VisualStudio
 @"      <CachedSettingsPropName>[cachedSettingsPropName]</CachedSettingsPropName>
 ";
 
-
+            public static string PropertyGroupWithConditionStart =
+@"  <PropertyGroup Condition=""[projectConfigurationCondition]"">
+";
 
             public static class ItemGroups
             {
@@ -690,17 +691,6 @@ namespace Sharpmake.Generators.VisualStudio
   </ProjectExtensions>
 ";
 
-            public const string CustomPropertiesStart =
-@"  <PropertyGroup>
-";
-
-            public const string CustomProperty =
-            @"    <[custompropertyname]>[custompropertyvalue]</[custompropertyname]>
-";
-
-            public const string CustomPropertiesEnd =
-            @"  </PropertyGroup>
-";
             public static class UserFile
             {
                 public static readonly string StartWithProject =

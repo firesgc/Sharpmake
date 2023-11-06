@@ -171,19 +171,6 @@ namespace Sharpmake
                 generator.Write(Vcxproj.Template.Project.ProjectDescriptionEnd);
             }
 
-            public override void GenerateProjectPlatformSdkDirectoryDescription(IVcxprojGenerationContext context, IFileGenerator generator)
-            {
-                base.GenerateProjectPlatformSdkDirectoryDescription(context, generator);
-
-                var devEnv = context.DevelopmentEnvironmentsRange.MinDevEnv;
-                if (devEnv.IsVisualStudio() && devEnv >= DevEnv.vs2019)
-                {
-                    string additionalVCTargetsPath = MSBuildGlobalSettings.GetAdditionalVCTargetsPath(devEnv, Platform.agde);
-                    if (!string.IsNullOrEmpty(additionalVCTargetsPath))
-                        generator.WriteVerbatim(_projectPropertySheets);
-                }
-            }
-
             public override void GenerateProjectCompileVcxproj(IVcxprojGenerationContext context, IFileGenerator generator)
             {
                 generator.Write(_projectConfigurationsCompileTemplate);
@@ -244,6 +231,13 @@ namespace Sharpmake
                 if (conf.Output.Equals(Project.Configuration.OutputType.Exe))
                 {
                     options["AndroidEnablePackaging"] = "true";
+
+                    context.SelectOption
+                    (
+                        Options.Option(Options.Agde.General.AndroidGradlePackaging.Enable, () => { options["SkipAndroidPackaging"] = "false"; }),
+                        Options.Option(Options.Agde.General.AndroidGradlePackaging.Disable, () => { options["SkipAndroidPackaging"] = "true"; })
+                    );
+
                     string option = Options.StringOption.Get<Options.Agde.General.AndroidApplicationModule>(conf);
                     options["AndroidApplicationModule"] = option != RemoveLineTag ? option : context.Project.Name.ToLowerInvariant();
 
@@ -253,6 +247,9 @@ namespace Sharpmake
 
                     option = Options.StringOption.Get<Options.Agde.General.AndroidApkName>(conf);
                     options["AndroidApkName"] = option != RemoveLineTag ? option : @"$(RootNamespace)-$(PlatformTarget).apk";
+
+                    option = Options.StringOption.Get<Options.Agde.General.AndroidGradlePackageOutputName>(conf);
+                    options["AndroidGradlePackageOutputName"] = option != RemoveLineTag ? option : @"$(AndroidApkName)";
 
                     option = Options.GetObject<Options.Agde.General.AndroidApkLocation>(conf)?.Path ?? RemoveLineTag;
                     options["AndroidApkLocation"] = option;
@@ -266,11 +263,13 @@ namespace Sharpmake
                 else
                 {
                     options["AndroidEnablePackaging"] = RemoveLineTag;
+                    options["SkipAndroidPackaging"] = RemoveLineTag;
                     options["AndroidApplicationModule"] = RemoveLineTag;
                     options["AndroidGradleBuildDir"] = RemoveLineTag;
                     options["AndroidGradleBuildIntermediateDir"] = RemoveLineTag;
                     options["AndroidExtraGradleArgs"] = RemoveLineTag;
                     options["AndroidApkName"] = RemoveLineTag;
+                    options["AndroidGradlePackageOutputName"] = RemoveLineTag;
                     options["AndroidApkLocation"] = RemoveLineTag;
                     options["AndroidPostApkInstallCommands"] = RemoveLineTag;
                     options["AndroidPreApkInstallCommands"] = RemoveLineTag;
@@ -484,8 +483,9 @@ namespace Sharpmake
 
                 context.SelectOption
                 (
-                Options.Option(Options.Agde.Compiler.MultiProcessorCompilation.Enable, () => { options["UseMultiToolTask"] = "true"; }),
-                Options.Option(Options.Agde.Compiler.MultiProcessorCompilation.Disable, () => { options["UseMultiToolTask"] = "false"; })
+                Options.Option(Options.Agde.Compiler.NativeBuildBackend.MultiToolTaskMSBuild, () => { options["NativeBuildBackend"] = "MultiToolTaskMSBuild"; }),
+                Options.Option(Options.Agde.Compiler.NativeBuildBackend.OriginalMSBuild, () => { options["NativeBuildBackend"] = "OriginalMSBuild"; }),
+                Options.Option(Options.Agde.Compiler.NativeBuildBackend.Ninja, () => { options["NativeBuildBackend"] = "Ninja"; })
                 );
 
                 context.SelectOption
@@ -606,11 +606,12 @@ namespace Sharpmake
                 ));
             }
 
-            public override void SetupPlatformLibraryOptions(ref string platformLibExtension, ref string platformOutputLibExtension, ref string platformPrefixExtension)
+            public override void SetupPlatformLibraryOptions(out string platformLibExtension, out string platformOutputLibExtension, out string platformPrefixExtension, out string platformLibPrefix)
             {
                 platformLibExtension = ".a";
-                platformOutputLibExtension = string.Empty;
+                platformOutputLibExtension = StaticLibraryFileFullExtension;
                 platformPrefixExtension = "-l:";
+                platformLibPrefix = "lib";
             }
 
             protected override IEnumerable<string> GetIncludePathsImpl(IGenerationContext context)
