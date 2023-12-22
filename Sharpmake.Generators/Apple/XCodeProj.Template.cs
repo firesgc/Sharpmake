@@ -253,7 +253,7 @@ namespace Sharpmake.Generators.Apple
                 { ItemSection.PBXTargetDependency,
 @"		[item.Uid] /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			name = [item.ProjectReference.Name];
+			name = ""[item.ProjectReference.Name]"";
 			targetProxy = [item.Proxy.Uid];
 			target = [item.TargetIdentifier];
 		};
@@ -276,6 +276,7 @@ namespace Sharpmake.Generators.Apple
 				ENABLE_BITCODE = [item.Options.EnableBitcode];
 				EXCLUDED_SOURCE_FILE_NAMES = [item.Options.ExcludedSourceFileNames];
 				FRAMEWORK_SEARCH_PATHS = [item.Options.FrameworkPaths];
+				FASTBUILD_TARGET = ""[item.Options.FastBuildTarget]"";
 				GCC_DYNAMIC_NO_PIC = [item.Options.DynamicNoPic];
 				GCC_ENABLE_CPP_EXCEPTIONS = [item.Options.CppExceptionHandling];
 				GCC_ENABLE_CPP_RTTI = [item.Options.RuntimeTypeInfo];
@@ -380,22 +381,30 @@ namespace Sharpmake.Generators.Apple
 @"		[item.Uid] /* UnitTest Target - [item.Optimization] */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = ""[testHost]"";
+				BUNDLE_LOADER = ""$(TEST_HOST)"";
 				CODE_SIGN_IDENTITY = ""[item.Options.CodeSigningIdentity]"";
 				""CODE_SIGN_IDENTITY[sdk=iphoneos*]"" = ""[item.Options.CodeSigningIdentity]"";
 				CONFIGURATION_BUILD_DIR = ""[item.Options.BuildDirectory]"";
-				EXCLUDED_SOURCE_FILE_NAMES = [item.Options.ExcludedSourceFileNames];
+				DEVELOPMENT_TEAM = [item.Options.DevelopmentTeam];
+				EXCLUDED_SOURCE_FILE_NAMES = [ExcludedSourceFileNames];
 				FRAMEWORK_SEARCH_PATHS = (
 [item.Options.FrameworkPaths]
 				);
 				GCC_DYNAMIC_NO_PIC = [item.Options.DynamicNoPic];
 				GCC_ENABLE_CPP_RTTI = [item.Options.RuntimeTypeInfo];
 				GCC_SYMBOLS_PRIVATE_EXTERN = [item.Options.PrivateSymbols];
-				INFOPLIST_FILE = ""[item.Options.InfoPListFile]"";
-				PRODUCT_NAME = ""[item.Configuration.TargetFileName]"";
+				HEADER_SEARCH_PATHS = [item.Options.IncludePaths];
+				INFOPLIST_FILE = ""[item.Options.UnitTestInfoPListFile]"";
+				IPHONEOS_DEPLOYMENT_TARGET = ""[item.Options.IPhoneOSDeploymentTarget]"";
+				LIBRARY_SEARCH_PATHS = [item.Options.LibraryPaths];
+				OTHER_LDFLAGS = -ObjC;
+				PRODUCT_NAME = ""[item.Target.Identifier]"";
+				PRODUCT_BUNDLE_IDENTIFIER = ""[item.Options.ProductBundleIdentifier].unittest"";
+				SYMROOT = ""[SymRoot]"";
+				TARGETED_DEVICE_FAMILY = ""[item.Options.TargetedDeviceFamily]"";
 				TEST_HOST = ""[testHost]"";
 				WRAPPER_EXTENSION = xctest;
-			};
+		};
 			name = [item.Options.TargetName];
 		};
 "               },

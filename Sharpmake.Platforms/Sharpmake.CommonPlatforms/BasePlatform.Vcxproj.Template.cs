@@ -74,6 +74,9 @@ namespace Sharpmake
       <ForcedIncludeFiles>[options.ForcedIncludeFiles]</ForcedIncludeFiles>
       <ForcedUsingFiles>[options.ForcedUsingFiles]</ForcedUsingFiles>
       <SupportJustMyCode>[options.SupportJustMyCode]</SupportJustMyCode>
+      <MaxFilesInUnityFile>[options.MaxFilesPerJumboFile]</MaxFilesInUnityFile>
+      <MinFilesInUnityFile>[options.MinFilesPerJumboFile]</MinFilesInUnityFile>
+      <MinUnityFiles>[options.MinJumboFiles]</MinUnityFiles>
     </ClCompile>
 ";
 
@@ -172,7 +175,6 @@ namespace Sharpmake
     <TranslateIncludes>[options.TranslateIncludes]</TranslateIncludes>
     <CharacterSet>[options.CharacterSet]</CharacterSet>
     <UseOfMfc>[options.UseOfMfc]</UseOfMfc>
-    <CLRSupport>[clrSupport]</CLRSupport>
     <WholeProgramOptimization>[options.WholeProgramOptimization]</WholeProgramOptimization>
     <PlatformToolset>[options.PlatformToolset]</PlatformToolset>
     <TrackFileAccess>[options.TrackFileAccess]</TrackFileAccess>
@@ -180,6 +182,7 @@ namespace Sharpmake
     <WindowsTargetPlatformVersion>[options.WindowsTargetPlatformVersion]</WindowsTargetPlatformVersion>
     <SpectreMitigation>[options.SpectreMitigation]</SpectreMitigation>
     <EnableASAN>[options.EnableASAN]</EnableASAN>
+    <EnableUnitySupport>[options.JumboBuild]</EnableUnitySupport>
   </PropertyGroup>
 ";
 

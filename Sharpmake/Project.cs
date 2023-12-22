@@ -22,6 +22,8 @@ namespace Sharpmake
             set { SetProperty(ref _name, value); }
         }
 
+        public string XcodeUnitTestTargetName = "XCTest";
+
         private bool _isFileNameToLower = true;                                         // Makes the ProjectName ToLower or not
         public bool IsFileNameToLower
         {
@@ -147,6 +149,10 @@ namespace Sharpmake
 
         public Strings ResourceFiles = new Strings();
         public Strings ResourceFilesExtensions = new Strings();
+
+        public string XcodeUnitTestSourceRootPath;                                      // Source root path in the project for Xcode unit test target
+        public Strings XcodeUnitTestSourceFiles = new Strings();                        // Source files in the project for Xcode unit test target
+        public Strings XcodeUnitTestSourceFilesBuildExclude = new Strings();            // Source files to be excluded from build from XcodeUnitTestSourceFiles
 
         public Strings NatvisFiles = new Strings();
         public Strings NatvisFilesExtensions = new Strings(".natvis");
@@ -425,6 +431,8 @@ namespace Sharpmake
             yield return SourceFilesBlobExtensions;
             yield return ResourceFiles;
             yield return ResourceFilesExtensions;
+            yield return XcodeUnitTestSourceFiles;
+            yield return XcodeUnitTestSourceFilesBuildExclude;
             yield return NatvisFiles;
             yield return NatvisFilesExtensions;
             yield return PRIFilesExtensions;
@@ -2585,6 +2593,10 @@ namespace Sharpmake
         private List<string> _filteredEmbeddedAssemblies = null;
         public virtual string GetLinkFolder(string file)
         {
+            // file is under the influence of the project and is not a link
+            if (Util.PathIsUnderRoot(RootPath, file))
+                return null;
+
             if (PreserveLinkFolderPaths)
             {
                 string relativePath = Util.PathGetRelative(SourceRootPath, Path.GetDirectoryName(file));

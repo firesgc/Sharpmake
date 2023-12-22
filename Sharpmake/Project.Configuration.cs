@@ -1605,6 +1605,11 @@ namespace Sharpmake
             /// </remarks>
             public bool DoNotGenerateFastBuild = false;
 
+            // Jumbo builds support for msbuild
+            public int MaxFilesPerJumboFile = 0;
+            public int MinFilesPerJumboFile = 2;
+            public int MinJumboFiles = 1;
+
             // container for executable
             /// <summary>
             /// Represents a build step that invokes an executable on the file system.
@@ -2576,6 +2581,33 @@ namespace Sharpmake
             }
 
             public Strings ResolvedSourceFilesBuildExclude = new Strings();
+
+            private Strings _XcodeUnitTestSourceFilesBuildExclude = null;
+            public Strings XcodeUnitTestSourceFilesBuildExclude
+            {
+                get
+                {
+                    if (_XcodeUnitTestSourceFilesBuildExclude == null)
+                    {
+                        _XcodeUnitTestSourceFilesBuildExclude = new Strings();
+                    }
+                    return _XcodeUnitTestSourceFilesBuildExclude;
+                }
+                private set { _XcodeUnitTestSourceFilesBuildExclude = value; }
+            }
+            private Strings _XcodeResolvedUnitTestSourceFilesBuildExclude = null;
+            public Strings XcodeResolvedUnitTestSourceFilesBuildExclude
+            {
+                get
+                {
+                    if (_XcodeResolvedUnitTestSourceFilesBuildExclude == null)
+                    {
+                        _XcodeResolvedUnitTestSourceFilesBuildExclude = new Strings();
+                    }
+                    return _XcodeResolvedUnitTestSourceFilesBuildExclude;
+                }
+                private set { _XcodeResolvedUnitTestSourceFilesBuildExclude = value; }
+            }
 
             public Strings ResolvedSourceFilesBlobExclude = new Strings();
 
