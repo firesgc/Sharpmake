@@ -112,7 +112,7 @@ namespace Sharpmake.Generators.FastBuild
             {
                 // use custom platform name if a reserved platform or append it if different
                 string fullPlatformString = Util.GetPlatformString(conf.Platform, project, conf.Target, isForSolution: false).ToLowerInvariant();
-                if (conf.Platform >= Platform._reserved9)
+                if (conf.Platform >= Platform._reservedPlatformSection)
                     platformString = fullPlatformString;
                 else if (!fullPlatformString.Equals(platformString, StringComparison.OrdinalIgnoreCase))
                     platformString += "_" + fullPlatformString;
@@ -126,7 +126,7 @@ namespace Sharpmake.Generators.FastBuild
         {
             string define = PlatformRegistry.Get<IPlatformBff>(platform).BffPlatformDefine;
             if (define == null)
-                throw new NotImplementedException($"Please add {platform} specific define for bff sections, ideally the same as ExplicitDefine, to get Intellisense.");
+                throw new NotImplementedException($"Please add {Util.GetSimplePlatformString(platform)} specific define for bff sections, ideally the same as ExplicitDefine, to get Intellisense.");
 
             return define;
         }
@@ -2000,6 +2000,7 @@ namespace Sharpmake.Generators.FastBuild
                 UnityInputExcludedFiles = fastBuildUnityInputExcludedfiles,
                 UnityInputPattern = fastBuildUnityInputPattern,
                 UseRelativePaths = conf.FastBuildUnityUseRelativePaths ? "true" : FileGeneratorUtilities.RemoveLineTag,
+                UnitySectionBucket = conf.FastBuildUnitySectionBucket,
             };
 
             // _unities being a dictionary, a new entry will be created only

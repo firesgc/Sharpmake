@@ -32,6 +32,8 @@ namespace HelloLinux
             conf.AddPrivateDependency<Dll1Project>(target);
             conf.AddPrivateDependency<StaticLib2Project>(target);
             conf.AddPrivateDependency<HeaderOnlyLibProject>(target);
+            conf.AddPrivateDependency<ExternalLibProject>(target);
+            conf.AddPrivateDependency<LibGroupProject>(target);
 
             conf.Defines.Add("CREATION_DATE=\"October 2020\"");
         }

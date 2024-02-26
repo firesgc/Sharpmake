@@ -1597,6 +1597,39 @@ namespace Sharpmake
             public bool FastBuildUnityUseRelativePaths = false;
 
             /// <summary>
+            /// Give a same value to configurations with same fastbuild unity settings that you want to keep together. If you want to have developer
+            /// machines have fastbuild cache hits but the section settings are not exactly the same for some targets you will need this field to
+            /// to have the same unity sections than on your build machines(typically at Ubisoft, only have the build machines have the cache in read-write mode).
+            /// </summary>
+            /// <remarks>
+            /// With this field we can force some extra fastbuild unity sections even for sections with identical settings.
+            /// Sharpmake will take into account the bucket number when creating its internal unity objects and this will let us create artifical delimitation 
+            /// of setting sections.
+            /// This field should be used only if FragmentHashUnityResolver is used.
+            /// </remarks>
+            /// <example>
+            /// You have two targets: Debug and Release. You want to enable deoptimization on debug target on developer machine but never on build machines
+            /// In a Configure method you do this:
+            /// if (IsBuildMachine() || target.Optimization > Optimization.Debug )
+            /// {
+            ///     conf.FastBuildUnityInputIsolateWritableFiles = false;
+            ///     conf.FastBuildDeoptimization = Configuration.DeoptimizationWritableFiles.NoDeoptimization;
+            ///}
+            ///else
+            ///{
+            ///    conf.FastBuildUnityInputIsolateWritableFilesLimit = 50;
+            ///    conf.FastBuildDeoptimization = true;
+            ///}
+            /// Without this change and the code below we have different unity sections on build machine and developper machines, causing fastbuild cache misses.
+            /// We now do this in a Configure method:
+            /// conf.FastBuildUnitySectionBucket = (byte)(target.Optimization > Optimization.Debug ? 1 : 0);
+            /// By doing this we force two separate unity sections on build machines(same as on developer machine).
+            /// 
+            /// Important: This assumes that you configured Sharpmake to use FragmentHashUnityResolver as the unity resolver.
+            /// </example>
+            public Byte FastBuildUnitySectionBucket = 0;
+
+            /// <summary>
             /// Gets or sets whether to generate a FASTBuild (.bff) file when using FASTBuild.
             /// </summary>
             /// <remarks>
@@ -2165,6 +2198,10 @@ namespace Sharpmake
                 /// This is the executable for the custom build step.
                 /// </summary>
                 public string Executable = "";
+                /// <summary>
+                /// Use this to indicate the executable is in the system Path
+                /// </summary>
+                public bool UseExecutableFromSystemPath = false;
                 /// <summary>
                 /// These are the arguments to pass to the executable.
                 /// </summary>
@@ -2775,7 +2812,12 @@ namespace Sharpmake
                 {
                     customFileBuildStep.Resolve(resolver);
                     Util.ResolvePath(Project.SourceRootPath, ref customFileBuildStep.KeyInput);
-                    Util.ResolvePath(Project.SourceRootPath, ref customFileBuildStep.Executable);
+
+                    if(!customFileBuildStep.UseExecutableFromSystemPath)
+                    {
+                        Util.ResolvePath(Project.SourceRootPath, ref customFileBuildStep.Executable);
+                    }
+
                     Util.ResolvePath(Project.SourceRootPath, ref customFileBuildStep.Output);
                     Util.ResolvePath(Project.SourceRootPath, ref customFileBuildStep.AdditionalInputs);
                 }
