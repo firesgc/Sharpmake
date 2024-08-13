@@ -10,6 +10,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
+using Sharpmake.Generators.FastBuild;
 using Sharpmake.Generators.VisualStudio;
 
 namespace Sharpmake.Generators.Apple
@@ -96,7 +97,7 @@ namespace Sharpmake.Generators.Apple
 
         static XCodeProj()
         {
-            FolderSeparator = Util.UnixSeparator;
+            FolderSeparator = Path.DirectorySeparatorChar;
         }
 
         private void PrepareUnitTestSources(
@@ -588,7 +589,8 @@ popd";
                     if (conf.Output == Project.Configuration.OutputType.AppleFramework)
                         RegisterHeadersBuildPhase(xCodeTargetName, _headersBuildPhases);
 
-                    RegisterCopyFilesBuildPhases(xCodeTargetName, _copyFilesBuildPhases, conf.ResolvedTargetCopyFiles.GetEnumerator(), conf.TargetCopyFilesPath);
+                    var folderSpec = conf.Output == Project.Configuration.OutputType.Exe ? FolderSpec.AbsolutePath : FolderSpec.Resources;
+                    RegisterCopyFilesBuildPhases(xCodeTargetName, _copyFilesBuildPhases, conf.ResolvedTargetCopyFiles.GetEnumerator(), conf.TargetCopyFilesPath, folderSpec);
                     RegisterCopyFilesBuildPhases(xCodeTargetName, _copyFilesBuildPhases, conf.ResolvedTargetCopyFilesToSubDirectory.GetEnumerator());
                     RegisterCopyFilesBuildPhases(xCodeTargetName, _copyFilesPostBuildPhases, conf.EventPostBuildCopies.GetEnumerator());
                     RegisterCopyFilesBuildPhases(xCodeTargetName, _copyFilesPreBuildPhases, conf.ResolvedEventPreBuildExe.GetEnumerator());
@@ -653,9 +655,9 @@ popd";
                             break;
                     }
 
-                    // master bff path
                     if (conf.IsFastBuild)
                     {
+                        // master bff path
                         // we only support projects in one or no master bff, but in that last case just output a warning
                         var masterBffList = conf.FastBuildMasterBffList.Distinct().ToArray();
                         if (masterBffList.Length == 0)
@@ -672,6 +674,10 @@ popd";
                                 throw new Error("Project {0} has a fastbuild target that has distinct master bff, sharpmake only supports 1.", conf);
                             masterBffFilePath = masterBffList[0];
                         }
+
+                        // Make the commandline written in the bff available, except the master bff -config
+                        string commandLine = conf.GetFastBuildCommandLineArguments();
+                        Bff.SetCommandLineArguments(conf, commandLine);
                     }
 
                     if (conf.Output == Project.Configuration.OutputType.IosTestBundle)
@@ -954,7 +960,7 @@ popd";
             }
         }
 
-        private void RegisterCopyFilesBuildPhases(string xCodeTargetName, Dictionary<string, UniqueList<ProjectCopyFilesBuildPhase>> copyFilesPhases, string file, string targetPath)
+        private void RegisterCopyFilesBuildPhases(string xCodeTargetName, Dictionary<string, UniqueList<ProjectCopyFilesBuildPhase>> copyFilesPhases, string file, string targetPath, FolderSpec folderSpec = FolderSpec.Resources)
         {
             PrepareCopyFiles(xCodeTargetName, file);
 
@@ -962,17 +968,17 @@ popd";
             _projectItems.Add(copyFileItem);
             var copyBuildPhase = copyFilesPhases[xCodeTargetName].Where(p => p.TargetPath == targetPath).Any() ?
                 copyFilesPhases[xCodeTargetName].Where(p => p.TargetPath == targetPath).First() :
-                new ProjectCopyFilesBuildPhase(2147483647, targetPath, FolderSpec.Resources);
+                new ProjectCopyFilesBuildPhase(2147483647, targetPath, folderSpec);
             copyBuildPhase.Files.Add(copyFileItem);
             _projectItems.Add(copyBuildPhase);
             copyFilesPhases[xCodeTargetName].Add(copyBuildPhase);
         }
 
-        private void RegisterCopyFilesBuildPhases(string xCodeTargetName, Dictionary<string, UniqueList<ProjectCopyFilesBuildPhase>> copyFilesPhases, IEnumerator<string> files, string targetPath)
+        private void RegisterCopyFilesBuildPhases(string xCodeTargetName, Dictionary<string, UniqueList<ProjectCopyFilesBuildPhase>> copyFilesPhases, IEnumerator<string> files, string targetPath, FolderSpec folderSpec)
         {
             while (files.MoveNext())
             {
-                RegisterCopyFilesBuildPhases(xCodeTargetName, copyFilesPhases, files.Current, targetPath);
+                RegisterCopyFilesBuildPhases(xCodeTargetName, copyFilesPhases, files.Current, targetPath, folderSpec);
             }
         }
 
@@ -1495,17 +1501,25 @@ popd";
             // linker(ld) of Xcode: only accept libfilename without prefix and suffix.
             linkerOptions.AddRange(libFiles.Select(library =>
             {
+                bool hasLibraryExtension = Path.HasExtension(library) &&
+                    ((Path.GetExtension(library).EndsWith(".a", StringComparison.OrdinalIgnoreCase) ||
+                      Path.GetExtension(library).EndsWith(".dylib", StringComparison.OrdinalIgnoreCase)
+                    ));
+
                 // deal with full library path: add libdir and libname
                 if (Path.IsPathFullyQualified(library))
                 {
+                    // Special case with full path: pass them as is.
+                    // This is to leave the possibility to force the extension,
+                    // preventing conflict if the folder contains both .a and .dylib version.
+                    if (hasLibraryExtension)
+                        return library;
+
                     conf.LibraryPaths.Add(Path.GetDirectoryName(library));
                     library = Path.GetFileName(library);
                 }
 
-                if (Path.HasExtension(library) &&
-                    ((Path.GetExtension(library).EndsWith(".a", StringComparison.OrdinalIgnoreCase) ||
-                      Path.GetExtension(library).EndsWith(".dylib", StringComparison.OrdinalIgnoreCase)
-                    )))
+                if (hasLibraryExtension)
                 {
                     library = Path.GetFileNameWithoutExtension(library);
                     if (library.StartsWith("lib"))

@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Sharpmake.Generators;
 using Sharpmake.Generators.Apple;
@@ -24,6 +25,9 @@ namespace Sharpmake
 
         #region IPlatformDescriptor
         public abstract string SimplePlatformString { get; }
+        // The toolchain-specific platform string is not needed with Xcode so we just use the
+        // simple platform name in case some of the base/common generation code needs it
+        public string GetToolchainPlatformString(ITarget target) => SimplePlatformString;
         public bool IsMicrosoftPlatform => false;
         public bool IsUsingClang => true;
         public bool IsLinkerInvokedViaCompiler
@@ -47,8 +51,6 @@ namespace Sharpmake
         {
             return new EnvironmentVariableResolver(variables);
         }
-
-        public string GetPlatformString(ITarget target) => SimplePlatformString;
         #endregion
 
         #region IFastBuildCompilerSettings implementation
@@ -97,7 +99,12 @@ namespace Sharpmake
                 foreach (string define in defines.SortedValues)
                 {
                     if (!string.IsNullOrWhiteSpace(define))
-                        fastBuildDefines.Add(string.Concat(platformDefineSwitch, define));
+                    {
+                        if (Util.GetExecutingPlatform() == Platform.win64)
+                            fastBuildDefines.Add(string.Format(@"{0}{1}{2}{1}", platformDefineSwitch, Util.DoubleQuotes, define.Replace(Util.DoubleQuotes, Util.EscapedDoubleQuotes)));
+                        else
+                            fastBuildDefines.Add(string.Concat(platformDefineSwitch, define));
+                    }
                 }
                 context.CommandLineOptions["PreprocessorDefinitions"] = string.Join($"'{Environment.NewLine}            + ' ", fastBuildDefines);
             }
@@ -114,7 +121,12 @@ namespace Sharpmake
                 foreach (string resourceDefine in resourceDefines.SortedValues)
                 {
                     if (!string.IsNullOrWhiteSpace(resourceDefine))
-                        fastBuildDefines.Add(string.Concat(platformDefineSwitch, resourceDefine));
+                    {
+                        if (Util.GetExecutingPlatform() == Platform.win64)
+                            fastBuildDefines.Add(string.Format(@"""{0}{1}""", platformDefineSwitch, resourceDefine.Replace(Util.DoubleQuotes, Util.EscapedDoubleQuotes)));
+                        else
+                            fastBuildDefines.Add(string.Concat(platformDefineSwitch, resourceDefine));
+                    }
                 }
                 context.CommandLineOptions["ResourcePreprocessorDefinitions"] = string.Join($"'{Environment.NewLine}                                    + ' ", fastBuildDefines);
             }
@@ -154,7 +166,29 @@ namespace Sharpmake
 
         public IEnumerable<Project.Configuration.BuildStepBase> GetExtraPostBuildEvents(Project.Configuration configuration, string fastBuildOutputFile)
         {
-            return Enumerable.Empty<Project.Configuration.BuildStepBase>();
+            if (Util.GetExecutingPlatform() == Platform.mac)
+            {
+                // Note: We only generate dsym for applications and bundles
+                if (configuration.IsFastBuild && 
+                   (configuration.Output == Project.Configuration.OutputType.AppleApp ||
+                   configuration.Output == Project.Configuration.OutputType.Exe ||
+                   configuration.Output == Project.Configuration.OutputType.AppleBundle || 
+                   configuration.Output == Project.Configuration.OutputType.Dll
+                   ))
+                {
+                    var debugFormat = Options.GetObject<Sharpmake.Options.XCode.Compiler.DebugInformationFormat>(configuration);
+                    if (debugFormat == Options.XCode.Compiler.DebugInformationFormat.DwarfWithDSym)
+                    {
+                        string outputPath = Path.Combine(configuration.TargetPath, configuration.TargetFileFullNameWithExtension + ".dSYM");
+                        yield return new Project.Configuration.BuildStepExecutable(
+                            "/usr/bin/dsymutil",
+                            fastBuildOutputFile,
+                            Path.Combine(configuration.IntermediatePath, configuration.TargetFileName + ".dsymdone"),
+                            $"{fastBuildOutputFile} -o {outputPath}",
+                            useStdOutAsOutput: true);
+                    }
+                }
+            }
         }
 
         public IEnumerable<Project.Configuration.BuildStepExecutable> GetExtraStampEvents(Project.Configuration configuration, string fastBuildOutputFile)
@@ -170,7 +204,7 @@ namespace Sharpmake
             var fastBuildSettings = PlatformRegistry.Get<IFastBuildCompilerSettings>(SharpmakePlatform);
 
             var platform = conf.Target.GetFragment<Platform>();
-            string compilerName = $"Compiler-{Util.GetSimplePlatformString(platform)}-{devEnv}";
+            string compilerName = $"Compiler-{Util.GetToolchainPlatformString(platform, conf.Target)}-{devEnv}";
             string CCompilerSettingsName = "C-" + compilerName;
             string CompilerSettingsName = compilerName;
 
@@ -214,7 +248,8 @@ namespace Sharpmake
                 if (!fastBuildSettings.CompilerFamily.TryGetValue(compilerFamilyKey, out compilerFamily))
                     compilerFamily = Sharpmake.CompilerFamily.Clang;
 
-                string executable = useCCompiler ? @"$ExecutableRootPath$\clang" : @"$ExecutableRootPath$\clang++";
+                string exeExtension = Util.GetExecutingPlatform() == Platform.win64 ? ".exe" : "";
+                string executable = Path.Combine(@"$ExecutableRootPath$", (useCCompiler ? "clang" : "clang++") + exeExtension);
 
                 compilerSettings = new CompilerSettings(compilerName, compilerFamily, SharpmakePlatform, extraFiles, executable, pathToCompiler, devEnv, new Dictionary<string, CompilerSettings.Configuration>());
                 masterCompilerSettings.Add(compilerName, compilerSettings);
@@ -238,11 +273,21 @@ namespace Sharpmake
 
                 string linkerExe;
                 if (!fastBuildSettings.LinkerExe.TryGetValue(devEnv, out linkerExe))
-                    linkerExe = IsLinkerInvokedViaCompiler ? "clang++" : "ld";
+                {
+                    if (Util.GetExecutingPlatform() == Platform.win64)
+                        linkerExe = IsLinkerInvokedViaCompiler ? "clang++.exe" : "ld64.lld.exe";
+                    else
+                        linkerExe = IsLinkerInvokedViaCompiler ? "clang++" : "ld";
+                }
 
                 string librarianExe;
                 if (!fastBuildSettings.LibrarianExe.TryGetValue(devEnv, out librarianExe))
-                    librarianExe = "ar";
+                {
+                    if (Util.GetExecutingPlatform() == Platform.win64)
+                        librarianExe = "llvm-ar.exe";
+                    else
+                        librarianExe = "ar";
+                }
 
                 configurations.Add(configName,
                     new CompilerSettings.Configuration(
@@ -250,8 +295,8 @@ namespace Sharpmake
                         compiler: compilerName,
                         binPath: binPath,
                         linkerPath: Util.GetCapitalizedPath(Util.PathGetAbsolute(projectRootPath, linkerPath)),
-                        librarian: @"$LinkerPath$\" + librarianExe,
-                        linker: @"$LinkerPath$\" + linkerExe,
+                        librarian: Path.Combine("$LinkerPath$", librarianExe),
+                        linker: Path.Combine("$LinkerPath$", linkerExe),
                         fastBuildLinkerType: CompilerSettings.LinkerType.GCC // Workaround: set GCC linker type since it will only enable response files
                     )
                 );
@@ -339,14 +384,8 @@ namespace Sharpmake
             }
             else
             {
-                if (dependencySetting.HasFlag(DependencySetting.LibraryPaths))
-                    configuration.DependenciesOtherLibraryPaths.Add(dependency.TargetPath, dependency.TargetLibraryPathOrderNumber);
                 if (dependencySetting.HasFlag(DependencySetting.LibraryFiles))
-                    configuration.DependenciesOtherLibraryFiles.Add(
-                        dependency.PreferRelativePaths ?
-                            dependency.TargetFileName :
-                            dependency.TargetFileFullNameWithExtension,
-                        dependency.TargetFileOrderNumber);
+                    configuration.AddDependencyBuiltTargetLibraryFile(Path.Combine(dependency.TargetLibraryPath, dependency.TargetFileFullNameWithExtension), dependency.TargetFileOrderNumber);
             }
         }
 
@@ -366,14 +405,8 @@ namespace Sharpmake
             }
             else
             {
-                if (dependencySetting.HasFlag(DependencySetting.LibraryPaths))
-                    configuration.DependenciesOtherLibraryPaths.Add(dependency.TargetLibraryPath, dependency.TargetLibraryPathOrderNumber);
                 if (dependencySetting.HasFlag(DependencySetting.LibraryFiles))
-                    configuration.DependenciesOtherLibraryFiles.Add(
-                        dependency.PreferRelativePaths ?
-                            dependency.TargetFileName :
-                            dependency.TargetFileFullNameWithExtension,
-                        dependency.TargetFileOrderNumber);
+                    configuration.DependenciesOtherLibraryFiles.Add(Path.Combine(dependency.TargetLibraryPath, dependency.TargetFileFullNameWithExtension), dependency.TargetFileOrderNumber);
             }
         }
 
@@ -615,6 +648,8 @@ namespace Sharpmake
                 options["CodeSigningIdentity"] = "AppleTV Developer"; //Previous Default value in the template
             else
                 options["CodeSigningIdentity"] = FileGeneratorUtilities.RemoveLineTag;
+
+            options["DyLibInstallName"] = XCodeUtil.ResolveProjectVariable(project, Options.StringOption.Get<Options.XCode.Linker.DyLibInstallName>(conf));
 
             context.SelectOption(
                 Options.Option(Options.XCode.Compiler.OnlyActiveArch.Disable, () => options["OnlyActiveArch"] = "NO"),
@@ -1216,6 +1251,12 @@ namespace Sharpmake
                 options["PreLinkedLibraries"] = prelinkedLibrary;
             }
 
+            var dylibInstallName = XCodeUtil.ResolveProjectVariable(context.Project, Options.StringOption.Get<Options.XCode.Linker.DyLibInstallName>(conf));
+            if (!string.IsNullOrEmpty(dylibInstallName))
+            {
+                cmdLineOptions["DyLibInstallName"] = $"-install_name \"{dylibInstallName}\"";
+            }
+
             OrderableStrings systemFrameworks = new OrderableStrings(conf.XcodeSystemFrameworks);
             systemFrameworks.AddRange(conf.XcodeDependenciesSystemFrameworks);
             cmdLineOptions["SystemFrameworks"] = systemFrameworks.Any() ? "-framework " + systemFrameworks.JoinStrings(" -framework ") : FileGeneratorUtilities.RemoveLineTag;
@@ -1374,6 +1415,8 @@ namespace Sharpmake
             includePaths.AddRange(conf.IncludePrivatePaths);
             includePaths.AddRange(conf.IncludePaths);
             includePaths.AddRange(conf.DependenciesIncludePaths);
+            includePaths.AddRange(conf.IncludeSystemPaths);
+            includePaths.AddRange(conf.DependenciesIncludeSystemPaths);
 
             includePaths.Sort();
             return includePaths;
@@ -1381,7 +1424,8 @@ namespace Sharpmake
 
         private IEnumerable<IncludeWithPrefix> GetPlatformIncludePathsWithPrefixImpl(IGenerationContext context)
         {
-            yield break;
+            const string cmdLineIncludePrefix = "-isystem";
+            return context.Configuration.DependenciesIncludeSystemPaths.Select(includePath => new IncludeWithPrefix(cmdLineIncludePrefix, includePath));
         }
 
         private IEnumerable<string> GetResourceIncludePathsImpl(IGenerationContext context)

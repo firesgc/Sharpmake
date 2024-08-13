@@ -15,7 +15,7 @@
     <ContinuousIntegrationBuild Condition="'$(GITLAB_CI)' == 'true' OR '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
 
     <!-- Compile Options -->
-    <LangVersion>11.0</LangVersion>
+    <LangVersion>10.0</LangVersion>
     <TargetFramework>net6.0</TargetFramework>
     <Deterministic>true</Deterministic>
     <Features>strict</Features>
@@ -23,11 +23,8 @@
     <EnforceCodeStyleInBuild Condition="$(ContinuousIntegrationBuild) == 'true' OR '$(Configuration)' == 'Release'">true</EnforceCodeStyleInBuild>
     <NoWarn>1570,1591</NoWarn> <!-- For xml documentation warnings -->
     <DefineConstants>TRACE</DefineConstants>
-    <DebugType>pdbonly</DebugType>
+    <DebugType>portable</DebugType>
     <InvariantGlobalization>true</InvariantGlobalization>
-
-    <!-- NuGet -->
-    <RestoreSources>https://api.nuget.org/v3/index.json</RestoreSources>
 
     <!-- Package info -->
     <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
@@ -36,7 +33,7 @@
 
   <!-- Automatic versionning based on Git repository -->
   <ItemGroup>
-    <PackageReference Include="GitInfo" Version="3.3.3" PrivateAssets="all" />
+    <PackageReference Include="GitInfo" Version="3.3.5" PrivateAssets="all" />
   </ItemGroup>
 
   <PropertyGroup>

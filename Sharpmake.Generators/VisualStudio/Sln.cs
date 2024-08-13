@@ -412,8 +412,10 @@ namespace Sharpmake.Generators.VisualStudio
             // TODO: What happens if we define an existing folder?
             foreach (var items in solution.ExtraItems)
             {
-                using (fileGenerator.Declare("folderName", items.Key))
-                using (fileGenerator.Declare("folderGuid", Util.BuildGuid(items.Key)))
+                var folder = GetSolutionFolder(items.Key);
+
+                using (fileGenerator.Declare("folderName", folder.Name))
+                using (fileGenerator.Declare("folderGuid", folder.Guid))
                 using (fileGenerator.Declare("solution", solution))
                 {
                     fileGenerator.Write(Template.Solution.ProjectFolder);
@@ -578,7 +580,7 @@ namespace Sharpmake.Generators.VisualStudio
                     using (fileGenerator.Declare("solutionConf", solutionConfiguration))
                     using (fileGenerator.Declare("projectGuid", solutionProject.UserData["Guid"]))
                     using (fileGenerator.Declare("projectConf", projectConf))
-                    using (fileGenerator.Declare("projectPlatform", Util.GetPlatformString(projectPlatform, solutionProject.Project, solutionConfiguration.Target, true)))
+                    using (fileGenerator.Declare("projectPlatform", Util.GetToolchainPlatformString(projectPlatform, solutionProject.Project, solutionConfiguration.Target, true)))
                     using (fileGenerator.Declare("category", category))
                     using (fileGenerator.Declare("configurationName", configurationName))
                     {

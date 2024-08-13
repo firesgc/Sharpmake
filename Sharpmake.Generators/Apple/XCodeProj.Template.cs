@@ -267,7 +267,6 @@ namespace Sharpmake.Generators.Apple
 				CODE_SIGN_IDENTITY = ""[item.Options.CodeSigningIdentity]"";
 				""CODE_SIGN_IDENTITY[sdk=iphoneos*]"" = ""[item.Options.CodeSigningIdentity]"";
 				CONFIGURATION_BUILD_DIR = ""[item.Options.BuildDirectory]"";
-				CONFIGURATION_TEMP_DIR = ""[item.Configuration.IntermediatePath]"";
 				COPY_PHASE_STRIP = [item.Options.StripDebugSymbolsDuringCopy];
 				DEAD_CODE_STRIPPING = [item.Options.DeadStripping];
 				DEBUG_INFORMATION_FORMAT = [item.Options.DebugInformationFormat];
@@ -298,7 +297,6 @@ namespace Sharpmake.Generators.Apple
 				""LIBRARY_SEARCH_PATHS[sdk=iphoneos*]"" = [item.Options.SpecificDeviceLibraryPaths];
 				""LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]"" = [item.Options.SpecificSimulatorLibraryPaths];
 				MACH_O_TYPE = ""[item.Options.MachOType]"";
-				OBJROOT = ""[item.Configuration.IntermediatePath]"";
 				PRESERVE_DEAD_CODE_INITS_AND_TERMS = [item.Options.PreserveDeadCodeInitsAndTerms];
 				PRODUCT_BUNDLE_IDENTIFIER = ""[item.Options.ProductBundleIdentifier]"";
 				PRODUCT_NAME = ""[item.Configuration.TargetFileName]"";
@@ -468,8 +466,10 @@ namespace Sharpmake.Generators.Apple
 				GCC_WARN_UNINITIALIZED_AUTOS = [item.Options.WarningUniniatializedAutos];
 				GCC_WARN_UNUSED_FUNCTION = [item.Options.WarningUnusedFunction];
 				GCC_WARN_UNUSED_VARIABLE = [item.Options.WarningUnusedVariable];
+				LD_DYLIB_INSTALL_NAME = ""[item.Options.DyLibInstallName]"";
 				ONLY_ACTIVE_ARCH = [item.Options.OnlyActiveArch];
 				OTHER_CPLUSPLUSFLAGS = [item.Options.CompilerOptions];
+				OTHER_CFLAGS = [item.Options.CompilerOptions];
 				OTHER_LDFLAGS = [item.Options.LinkerOptions];
 				SDKROOT = ""[item.Options.SDKRoot]"";
 				TARGETED_DEVICE_FAMILY = ""[item.Options.TargetedDeviceFamily]"";

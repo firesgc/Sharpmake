@@ -243,7 +243,7 @@ namespace Sharpmake.Generators.VisualStudio
                 public string Include;
 
                 // This property is used to decide if this object is a Link
-                // If LinkFolder is null, this item is ín the project folder and is not a link
+                // If LinkFolder is null, this item is in the project folder and is not a link
                 // If LinkFolder is empty, this item is in the project's SourceRootPath or RootPath folder
                 //      which are outside of the Project folder and is a link.
                 // If LinkedFolder is a file path, it's a link. 
@@ -1021,9 +1021,15 @@ namespace Sharpmake.Generators.VisualStudio
                 };
             }
 
+            [Obsolete("Use AddReference(TargetFramework, Reference) instead")]
             public void AddReference(DotNetFramework dotNetFramework, Reference reference)
             {
-                AddTargetFrameworksCondition(References, new TargetFramework(dotNetFramework), reference);
+                AddReference(new TargetFramework(dotNetFramework), reference);
+            }
+
+            public void AddReference(TargetFramework targetFramework, Reference reference)
+            {
+                AddTargetFrameworksCondition(References, targetFramework, reference);
             }
 
             public void AddPackageReference(TargetFramework targetFramework, ItemTemplate itemTemplate)
@@ -1163,7 +1169,7 @@ namespace Sharpmake.Generators.VisualStudio
                 if (conf.Output == Project.Configuration.OutputType.Dll)
                     throw new Error("OutputType for C# projects must be either DotNetClassLibrary, DotNetConsoleApp or DotNetWindowsApp");
 
-                string projectUniqueName = conf.Name + Util.GetPlatformString(conf.Platform, conf.Project, conf.Target);
+                string projectUniqueName = conf.Name + Util.GetToolchainPlatformString(conf.Platform, conf.Project, conf.Target);
 
                 configurationNameMapping[projectUniqueName] = conf;
 
@@ -1323,7 +1329,7 @@ namespace Sharpmake.Generators.VisualStudio
             using (resolver.NewScopedParameter("targetFrameworkVersionString", targetFrameworkVersionString))
             using (resolver.NewScopedParameter("projectTypeGuids", projectTypeGuids))
             using (resolver.NewScopedParameter("assemblyName", assemblyName))
-            using (resolver.NewScopedParameter("defaultPlatform", Util.GetPlatformString(project.DefaultPlatform ?? configurations[0].Platform, project, null)))
+            using (resolver.NewScopedParameter("defaultPlatform", Util.GetToolchainPlatformString(project.DefaultPlatform ?? configurations[0].Platform, project, null)))
             using (resolver.NewScopedParameter("netCoreEnableDefaultItems", netCoreEnableDefaultItems))
             using (resolver.NewScopedParameter("defaultItemExcludes", defaultItemExcludes))
             using (resolver.NewScopedParameter("GeneratedAssemblyConfigTemplate", generatedAssemblyConfigTemplate))
@@ -1427,10 +1433,13 @@ namespace Sharpmake.Generators.VisualStudio
                 uf.GenerateUserFile(_builder, project, _projectConfigurationList, generatedFiles, skipFiles);
             }
 
+            // In case we need to swap out dependencies, we'll cache them here
+            Dictionary<string, List<DotNetDependency>> swappedNamesToDependencies = null;
+
             // configuration general
             foreach (Project.Configuration conf in _projectConfigurationList)
             {
-                using (resolver.NewScopedParameter("platformName", Util.GetPlatformString(conf.Platform, conf.Project, conf.Target)))
+                using (resolver.NewScopedParameter("platformName", Util.GetToolchainPlatformString(conf.Platform, conf.Project, conf.Target)))
                 using (resolver.NewScopedParameter("conf", conf))
                 using (resolver.NewScopedParameter("project", project))
                 using (resolver.NewScopedParameter("targetFramework", GetTargetFrameworksString(projectFrameworksPerConf[conf])))
@@ -1453,38 +1462,51 @@ namespace Sharpmake.Generators.VisualStudio
                         if (!Util.IsDotNet(dependencyConfiguration))
                             continue;
 
-                        string dependencyExtension = Util.GetProjectFileExtension(dependencyConfiguration);
-                        string projectFullFileNameWithExtension = Util.GetCapitalizedPath(dependencyConfiguration.ProjectFullFileName + dependencyExtension);
-                        string relativeToProjectFile = Util.PathGetRelative(_projectPathCapitalized,
-                                                                            projectFullFileNameWithExtension);
-
-                        // If dependency project is marked as [Compile], read the GUID from the project file
-                        if (dependencyConfiguration.Project.SharpmakeProjectType == Project.ProjectTypeAttribute.Compile && dependencyConfiguration.ProjectGuid == null)
-                            dependencyConfiguration.ProjectGuid = ReadGuidFromProjectFile(dependencyConfiguration);
-
-                        // FIXME : MsBuild does not seem to properly detect ReferenceOutputAssembly setting. 
-                        // It may try to recompile the project if the output file of the dependency is missing. 
-                        // To counter this, the CopyLocal field is forced to false for build-only dependencies. 
-                        bool isPrivate = project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ProjectReferences) && dependency.ReferenceOutputAssembly != false;
-
-                        string includeOutputGroupsInVsix = null;
-                        if (isPrivate && project.ProjectTypeGuids == CSharpProjectType.Vsix)
+                        if (dependency.ReferenceSwappedWithOutputAssembly)
                         {
-                            // Includes debug symbols of private (i.e. copy local) referenced projects in the VSIX.
-                            // This WILL override default values of <IncludeOutputGroupsInVSIX> and <IncludeOutputGroupsInVSIXLocalOnly> from Microsoft.VsSDK.targets,
-                            // so if the VSIXs stop working, this may be the cause...
-                            includeOutputGroupsInVsix = "DebugSymbolsProjectOutputGroup;BuiltProjectOutputGroup;BuiltProjectOutputGroupDependencies;GetCopyToOutputDirectoryItems;SatelliteDllsProjectOutputGroup";
+                            // cache swapped dependencies and sort them out later since we have no visibility here regarding
+                            // multiple frameworks or optimizations from within a single Project.Configuration
+                            // Note: even if preallocating looks tempting, the time it takes to count the entries is actually longer than the time resizing
+                            swappedNamesToDependencies ??= new Dictionary<string, List<DotNetDependency>>(StringComparer.Ordinal);
+                            if (!swappedNamesToDependencies.TryAdd(dependency.Configuration.AssemblyName, new List<DotNetDependency>{ dependency }))
+                            {
+                                swappedNamesToDependencies[dependency.Configuration.AssemblyName].Add(dependency);
+                            }
                         }
-
-                        itemGroups.ProjectReferences.Add(new ItemGroups.ProjectReference
+                        else
                         {
-                            Include = relativeToProjectFile,
-                            Name = dependencyConfiguration.ProjectName,
-                            Private = isPrivate,
-                            Project = new Guid(dependencyConfiguration.ProjectGuid),
-                            ReferenceOutputAssembly = dependency.ReferenceOutputAssembly,
-                            IncludeOutputGroupsInVSIX = includeOutputGroupsInVsix,
-                        });
+                            string dependencyExtension = Util.GetProjectFileExtension(dependencyConfiguration);
+                            string projectFullFileNameWithExtension = Util.GetCapitalizedPath(dependencyConfiguration.ProjectFullFileName + dependencyExtension);
+                            string relativeToProjectFile = Util.PathGetRelative(_projectPathCapitalized, projectFullFileNameWithExtension);
+
+                            // If dependency project is marked as [Compile], read the GUID from the project file
+                            if (dependencyConfiguration.Project.SharpmakeProjectType == Project.ProjectTypeAttribute.Compile && dependencyConfiguration.ProjectGuid == null)
+                                dependencyConfiguration.ProjectGuid = ReadGuidFromProjectFile(dependencyConfiguration);
+
+                            // FIXME : MsBuild does not seem to properly detect ReferenceOutputAssembly setting. 
+                            // It may try to recompile the project if the output file of the dependency is missing. 
+                            // To counter this, the CopyLocal field is forced to false for build-only dependencies. 
+                            bool isPrivate = project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ProjectReferences) && dependency.ReferenceOutputAssembly != false;
+
+                            string includeOutputGroupsInVsix = null;
+                            if (isPrivate && project.ProjectTypeGuids == CSharpProjectType.Vsix)
+                            {
+                                // Includes debug symbols of private (i.e. copy local) referenced projects in the VSIX.
+                                // This WILL override default values of <IncludeOutputGroupsInVSIX> and <IncludeOutputGroupsInVSIXLocalOnly> from Microsoft.VsSDK.targets,
+                                // so if the VSIXs stop working, this may be the cause...
+                                includeOutputGroupsInVsix = "DebugSymbolsProjectOutputGroup;BuiltProjectOutputGroup;BuiltProjectOutputGroupDependencies;GetCopyToOutputDirectoryItems;SatelliteDllsProjectOutputGroup";
+                            }
+
+                            itemGroups.ProjectReferences.Add(new ItemGroups.ProjectReference
+                            {
+                                Include = relativeToProjectFile,
+                                Name = dependencyConfiguration.ProjectName,
+                                Private = isPrivate,
+                                Project = new Guid(dependencyConfiguration.ProjectGuid),
+                                ReferenceOutputAssembly = dependency.ReferenceOutputAssembly,
+                                IncludeOutputGroupsInVSIX = includeOutputGroupsInVsix,
+                            });
+                        }
                     }
                 }
 
@@ -1508,7 +1530,28 @@ namespace Sharpmake.Generators.VisualStudio
                         Project = projectGuid,
                     });
                 }
+            }
+            
+            if(swappedNamesToDependencies is not null)
+            {
+                foreach (List<DotNetDependency> groupedDependencies in swappedNamesToDependencies.Values)
+                {
+                    bool isMultiFramework = groupedDependencies.Select(d => d.Configuration.Target.GetFragment<DotNetFramework>()).Distinct().Count() > 1;
 
+                    foreach (var dependency in groupedDependencies.OrderByDescending(d => d.Configuration.Target.GetOptimization()))
+                    {
+                        TargetFramework targetFramework = GetTargetFramework(dependency.Configuration);
+                        string dllPath = Path.Combine(dependency.Configuration.TargetPath, $"{dependency.Configuration.AssemblyName}{dependency.Configuration.DllFullExtension}");
+                        var referencesByPath = new ItemGroups.Reference
+                        {
+                            Include = $"{dependency.Configuration.AssemblyName}{(isMultiFramework ? "-" + GetTargetFrameworksString(targetFramework) : "")}",
+                            SpecificVersion = false,
+                            HintPath = Util.PathGetRelative(_projectPathCapitalized, dllPath),
+                            Private = project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ExternalReferences),
+                        };
+                        itemGroups.AddReference(targetFramework, referencesByPath);
+                    }
+                }
             }
 
             if (project.RunPostBuildEvent != Options.CSharp.RunPostBuildEvent.OnBuildSuccess)
@@ -2381,7 +2424,7 @@ namespace Sharpmake.Generators.VisualStudio
                             Include = str,
                             Private = project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.DotNetReferences) ? default(bool?) : false,
                         };
-                        itemGroups.AddReference(dotNetFramework, referencesByName);
+                        itemGroups.AddReference(GetTargetFramework(conf), referencesByName);
                     }
                 }
             }
@@ -2396,7 +2439,7 @@ namespace Sharpmake.Generators.VisualStudio
                         Include = str,
                         Private = project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.DotNetExtensions),
                     };
-                    itemGroups.AddReference(dotNetFramework, referencesByNameExternal);
+                    itemGroups.AddReference(GetTargetFramework(conf), referencesByNameExternal);
                 }
             }
 
@@ -2412,7 +2455,7 @@ namespace Sharpmake.Generators.VisualStudio
                         HintPath = Util.PathGetRelative(_projectPathCapitalized, str),
                         Private = project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ExternalReferences),
                     };
-                    itemGroups.AddReference(dotNetFramework, referencesByPath);
+                    itemGroups.AddReference(GetTargetFramework(conf), referencesByPath);
                 }
 
                 foreach (var str in project.AdditionalEmbeddedAssemblies.Select(Util.GetCapitalizedPath))
@@ -2424,7 +2467,7 @@ namespace Sharpmake.Generators.VisualStudio
                         HintPath = Util.PathGetRelative(_projectPathCapitalized, str),
                         Private = false
                     };
-                    itemGroups.AddReference(dotNetFramework, referencesByPath);
+                    itemGroups.AddReference(GetTargetFramework(conf), referencesByPath);
                 }
             }
 
@@ -2436,7 +2479,7 @@ namespace Sharpmake.Generators.VisualStudio
                     foreach (var r in conf.DotNetReferences)
                     {
                         var references = GetItemGroupsReference(r, project.DependenciesCopyLocal);
-                        itemGroups.AddReference(dotNetFramework, references);
+                        itemGroups.AddReference(GetTargetFramework(conf), references);
                     }
                 }
             }
@@ -2636,7 +2679,7 @@ namespace Sharpmake.Generators.VisualStudio
                             dotNetHint = dnfs.ToFolderName();
                         }
                         string hintPath = Path.Combine("$(SolutionDir)packages", references.Name + "." + references.Version, "lib", dotNetHint, references.Name + ".dll");
-                        itemGroups.AddReference(targetFramework.DotNetFramework, new ItemGroups.Reference { Include = references.Name, HintPath = hintPath });
+                        itemGroups.AddReference(targetFramework, new ItemGroups.Reference { Include = references.Name, HintPath = hintPath });
                     }
                 }
             }
@@ -2899,7 +2942,7 @@ namespace Sharpmake.Generators.VisualStudio
 
         private void WriteEvents(Project.Configuration conf, Options.ExplicitOptions options, bool conditional, StreamWriter writer, Resolver resolver)
         {
-            using (resolver.NewScopedParameter("platformName", Util.GetPlatformString(conf.Platform, conf.Project, conf.Target)))
+            using (resolver.NewScopedParameter("platformName", Util.GetToolchainPlatformString(conf.Platform, conf.Project, conf.Target)))
             using (resolver.NewScopedParameter("conf", conf))
             using (resolver.NewScopedParameter("options", options))
             {

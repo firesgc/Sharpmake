@@ -5,6 +5,12 @@ include:
   - project: 'Sharpmake/SharpmakeExtended'
     file: 'build/sharpmake-ci.yml'
 
+stages:
+  - build
+  - test
+  - validation
+  - deploy
+
 
 default:
   tags:
@@ -23,7 +29,7 @@ default:
     matrix:
     - configuration: [debug, release]
   script:
-    - dotnet build Sharpmake.sln -c $configuration -bl:Sharpmake_$configuration.binlog
+    - dotnet build Sharpmake.sln -c $configuration -bl:Sharpmake_$configuration.binlog -clp:ForceConsoleColor
   artifacts:
     untracked: true
     expire_in: 1 day
@@ -34,9 +40,6 @@ compilation:windows:
 compilation:mac:
   extends: .compilation:base
   tags: [square_mac]
-  variables:
-    ANKA_TEMPLATE_UUID: '1c28e1d9-d8cf-4a36-89e5-b915ccb5f62f'
-    ANKA_TAG_NAME: '7.0.0'
 
 compilation:linux:
   extends: .compilation:base
