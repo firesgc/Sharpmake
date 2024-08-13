@@ -3709,7 +3709,7 @@ namespace Sharpmake.Generators.VisualStudio
 
                 foreach (Project.Configuration config in _projectConfigurationList)
                 {
-                    platorms.Add(Util.GetPlatformString(config.Platform, config.Project, config.Target));
+                    platorms.Add(Util.GetToolchainPlatformString(config.Platform, config.Project, config.Target));
                     configu.Add(config.Name);
                 }
 
