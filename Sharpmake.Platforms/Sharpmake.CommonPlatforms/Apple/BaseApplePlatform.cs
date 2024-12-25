@@ -16,11 +16,9 @@ namespace Sharpmake
         : IPlatformDescriptor
         , Project.Configuration.IConfigurationTasks
         , IFastBuildCompilerSettings
-        , IClangPlatformBff
+        , IApplePlatformBff
         , IPlatformVcxproj // TODO: this is really sad, nuke it
     {
-        protected const string XCodeDeveloperFolder = "/Applications/Xcode.app/Contents/Developer";
-
         public abstract Platform SharpmakePlatform { get; }
 
         #region IPlatformDescriptor
@@ -36,7 +34,8 @@ namespace Sharpmake
             {
                 bool isLinkerInvokedViaCompiler = false;
                 var fastBuildSettings = PlatformRegistry.Get<IFastBuildCompilerSettings>(SharpmakePlatform);
-                fastBuildSettings.LinkerInvokedViaCompiler.TryGetValue(DevEnv.xcode, out isLinkerInvokedViaCompiler);
+                if (fastBuildSettings.LinkerInvokedViaCompiler.TryGetValue(DevEnv.xcode, out bool isLinkerInvokedViaCompilerOverride))
+                    isLinkerInvokedViaCompiler = isLinkerInvokedViaCompilerOverride;
                 return isLinkerInvokedViaCompiler;
             }
         }
@@ -64,22 +63,33 @@ namespace Sharpmake
         #endregion
 
 
-        #region IClangPlatformBff implementation
+        #region IApplePlatformBff implementation
 
         public abstract string BffPlatformDefine { get; }
         public abstract string CConfigName(Configuration conf);
         public abstract string CppConfigName(Configuration conf);
+        public abstract string SwiftConfigName(Configuration conf);
 
         public void SetupClangOptions(IFileGenerator generator)
         {
-            WriteCompilerExtraOptionsGeneral(generator);
+            generator.Write(_compilerExtraOptionsGeneral);
+            generator.Write(_compilerExtraOptionsAdditional);
             generator.Write(_compilerOptimizationOptions);
         }
 
-        protected virtual void WriteCompilerExtraOptionsGeneral(IFileGenerator generator)
+        public bool IsSwiftSupported()
         {
-            generator.Write(_compilerExtraOptionsGeneral);
-            generator.Write(_compilerExtraOptionsAdditional);
+            return SwiftForApple.Settings.SwiftSupportEnabled;
+        }
+
+        public void SetupSwiftOptions(IFileGenerator generator)
+        {
+            if (!IsSwiftSupported())
+                throw new Error("Swift is not supported");
+
+            generator.Write(_swiftCompilerExtraOptionsGeneral);
+            generator.Write(_swiftCompilerExtraOptionsAdditional);
+            generator.Write(_swiftCompilerOptimizationOptions);
         }
 
         public virtual void SelectPreprocessorDefinitionsBff(IBffGenerationContext context)
@@ -133,6 +143,23 @@ namespace Sharpmake
             else
             {
                 context.CommandLineOptions["ResourcePreprocessorDefinitions"] = FileGeneratorUtilities.RemoveLineTag;
+            }
+        }
+
+        public virtual void SelectAdditionalCompilerOptionsBff(IBffGenerationContext context)
+        {
+            if (IsSwiftSupported())
+            {
+                Options.XCode.Compiler.SwiftAdditionalCompilerOptions additionalSwiftOptions = Options.GetObject<Options.XCode.Compiler.SwiftAdditionalCompilerOptions>(context.Configuration);
+                if (additionalSwiftOptions != null && additionalSwiftOptions.Any())
+                {
+                    additionalSwiftOptions.Sort();
+                    context.CommandLineOptions["SwiftAdditionalCompilerOptions"] = string.Join($"'{Environment.NewLine}            + ' ", additionalSwiftOptions);
+                }
+                else
+                {
+                    context.CommandLineOptions["SwiftAdditionalCompilerOptions"] = FileGeneratorUtilities.RemoveLineTag;
+                }
             }
         }
 
@@ -198,27 +225,39 @@ namespace Sharpmake
 
         public string GetOutputFilename(Project.Configuration.OutputType outputType, string fastBuildOutputFile) => fastBuildOutputFile;
 
+        public enum CompilerFlavor
+        {
+            C, // for C and Objective-C
+            Cpp, // for C++ and Objective-C++
+            Swift
+        }
         public void AddCompilerSettings(IDictionary<string, CompilerSettings> masterCompilerSettings, Project.Configuration conf)
         {
             var devEnv = conf.Target.GetFragment<DevEnv>();
-            var fastBuildSettings = PlatformRegistry.Get<IFastBuildCompilerSettings>(SharpmakePlatform);
-
             var platform = conf.Target.GetFragment<Platform>();
             string compilerName = $"Compiler-{Util.GetToolchainPlatformString(platform, conf.Target)}-{devEnv}";
             string CCompilerSettingsName = "C-" + compilerName;
             string CompilerSettingsName = compilerName;
 
             var projectRootPath = conf.Project.RootPath;
-            CompilerSettings compilerSettings = GetMasterCompilerSettings(masterCompilerSettings, CompilerSettingsName, devEnv, projectRootPath, false);
+            CompilerSettings compilerSettings = GetMasterCompilerSettings(masterCompilerSettings, CompilerSettingsName, devEnv, projectRootPath, CompilerFlavor.Cpp);
             compilerSettings.PlatformFlags |= SharpmakePlatform;
-            CompilerSettings CcompilerSettings = GetMasterCompilerSettings(masterCompilerSettings, CCompilerSettingsName, devEnv, projectRootPath, true);
+            CompilerSettings CcompilerSettings = GetMasterCompilerSettings(masterCompilerSettings, CCompilerSettingsName, devEnv, projectRootPath, CompilerFlavor.C);
             CcompilerSettings.PlatformFlags |= SharpmakePlatform;
 
-            SetConfiguration(compilerSettings, CompilerSettingsName, projectRootPath, devEnv, false);
-            SetConfiguration(CcompilerSettings, CCompilerSettingsName, projectRootPath, devEnv, true);
+            SetConfiguration(compilerSettings, CompilerSettingsName, projectRootPath, devEnv, CompilerFlavor.Cpp);
+            SetConfiguration(CcompilerSettings, CCompilerSettingsName, projectRootPath, devEnv, CompilerFlavor.C);
+
+            if (IsSwiftSupported())
+            {
+                string SwiftCompilerSettingsName = "Swift-" + compilerName;
+                CompilerSettings SwiftcompilerSettings = GetMasterCompilerSettings(masterCompilerSettings, SwiftCompilerSettingsName, devEnv, projectRootPath, CompilerFlavor.Swift);
+                SwiftcompilerSettings.PlatformFlags |= SharpmakePlatform;
+                SetConfiguration(SwiftcompilerSettings, SwiftCompilerSettingsName, projectRootPath, devEnv, CompilerFlavor.Swift);
+            }
         }
 
-        private CompilerSettings GetMasterCompilerSettings(IDictionary<string, CompilerSettings> masterCompilerSettings, string compilerName, DevEnv devEnv, string projectRootPath, bool useCCompiler)
+        private CompilerSettings GetMasterCompilerSettings(IDictionary<string, CompilerSettings> masterCompilerSettings, string compilerName, DevEnv devEnv, string projectRootPath, CompilerFlavor compilerFlavor)
         {
             CompilerSettings compilerSettings;
 
@@ -231,25 +270,62 @@ namespace Sharpmake
                 var fastBuildSettings = PlatformRegistry.Get<IFastBuildCompilerSettings>(SharpmakePlatform);
 
                 string binPath;
-                if (!fastBuildSettings.BinPath.TryGetValue(devEnv, out binPath))
-                    binPath = $"{XCodeDeveloperFolder}/Toolchains/XcodeDefault.xctoolchain/usr/bin";
+                switch (compilerFlavor)
+                {
+                    case CompilerFlavor.C:
+                    case CompilerFlavor.Cpp:
+                        if (fastBuildSettings.BinPath.TryGetValue(devEnv, out string binPathOverride))
+                            binPath = binPathOverride;
+                        else
+                            binPath = ClangForApple.GetClangExecutablePath();
+                        break;
+
+                    case CompilerFlavor.Swift:
+                            binPath = SwiftForApple.GetSwiftExecutablePath();
+                        break;
+                    default:
+                        throw new NotImplementedException();
+                }
 
                 string pathToCompiler = Util.GetCapitalizedPath(Util.PathGetAbsolute(projectRootPath, binPath));
 
                 Strings extraFiles = new Strings();
+
+                CompilerFamily compilerFamily;
+
+                if (compilerFlavor == CompilerFlavor.Swift)
+                {
+                    compilerFamily = Sharpmake.CompilerFamily.Custom;
+                }
+                else
                 {
                     Strings userExtraFiles;
                     if (fastBuildSettings.ExtraFiles.TryGetValue(devEnv, out userExtraFiles))
                         extraFiles.AddRange(userExtraFiles);
+
+                    var compilerFamilyKey = new FastBuildCompilerKey(devEnv);
+                    if (!fastBuildSettings.CompilerFamily.TryGetValue(compilerFamilyKey, out compilerFamily))
+                        compilerFamily = Sharpmake.CompilerFamily.Clang;
                 }
 
-                var compilerFamily = Sharpmake.CompilerFamily.Clang;
-                var compilerFamilyKey = new FastBuildCompilerKey(devEnv);
-                if (!fastBuildSettings.CompilerFamily.TryGetValue(compilerFamilyKey, out compilerFamily))
-                    compilerFamily = Sharpmake.CompilerFamily.Clang;
-
                 string exeExtension = Util.GetExecutingPlatform() == Platform.win64 ? ".exe" : "";
-                string executable = Path.Combine(@"$ExecutableRootPath$", (useCCompiler ? "clang" : "clang++") + exeExtension);
+                string executableName;
+                switch (compilerFlavor)
+                {
+                    case CompilerFlavor.C:
+                        executableName = "clang";
+                        break;
+                    case CompilerFlavor.Cpp:
+                        executableName = "clang++";
+                        break;
+                    case CompilerFlavor.Swift:
+                        executableName = "swiftc";
+                        break;
+                    default:
+                        throw new NotImplementedException();
+                }
+
+                string executable = Path.Combine(@"$ExecutableRootPath$", executableName + exeExtension);
 
                 compilerSettings = new CompilerSettings(compilerName, compilerFamily, SharpmakePlatform, extraFiles, executable, pathToCompiler, devEnv, new Dictionary<string, CompilerSettings.Configuration>());
                 masterCompilerSettings.Add(compilerName, compilerSettings);
@@ -258,15 +334,39 @@ namespace Sharpmake
             return compilerSettings;
         }
 
-        private void SetConfiguration(CompilerSettings compilerSettings, string compilerName, string projectRootPath, DevEnv devEnv, bool useCCompiler)
+        private void SetConfiguration(CompilerSettings compilerSettings, string compilerName, string projectRootPath, DevEnv devEnv, CompilerFlavor compilerFlavor)
         {
-            string configName = useCCompiler ? CConfigName(null) : CppConfigName(null);
+            string configName;
+            switch (compilerFlavor)
+            {
+                case CompilerFlavor.C:
+                    configName = CConfigName(null);
+                    break;
+                case CompilerFlavor.Cpp:
+                    configName = CppConfigName(null);
+                    break;
+                case CompilerFlavor.Swift:
+                    configName = SwiftConfigName(null);
+                    break;
+                default:
+                    throw new NotImplementedException();
+            }
 
             IDictionary<string, CompilerSettings.Configuration> configurations = compilerSettings.Configurations;
             if (!configurations.ContainsKey(configName))
             {
-                var fastBuildSettings = PlatformRegistry.Get<IFastBuildCompilerSettings>(SharpmakePlatform);
                 string binPath = compilerSettings.RootPath;
+
+                if (compilerFlavor == CompilerFlavor.Swift)
+                {
+                    // Compiler only
+                    configurations.Add(configName, new CompilerSettings.Configuration(SharpmakePlatform, compiler: compilerName, binPath: binPath));
+                    return;
+                }
+
+                var fastBuildSettings = PlatformRegistry.Get<IFastBuildCompilerSettings>(SharpmakePlatform);
+                string exeExtension = (Util.GetExecutingPlatform() == Platform.win64) ? ".exe" : "";
+
                 string linkerPath;
                 if (!fastBuildSettings.LinkerPath.TryGetValue(devEnv, out linkerPath))
                     linkerPath = binPath;
@@ -274,20 +374,15 @@ namespace Sharpmake
                 string linkerExe;
                 if (!fastBuildSettings.LinkerExe.TryGetValue(devEnv, out linkerExe))
                 {
-                    if (Util.GetExecutingPlatform() == Platform.win64)
-                        linkerExe = IsLinkerInvokedViaCompiler ? "clang++.exe" : "ld64.lld.exe";
+                    if (IsLinkerInvokedViaCompiler)
+                        linkerExe = "clang++" + exeExtension;
                     else
-                        linkerExe = IsLinkerInvokedViaCompiler ? "clang++" : "ld";
+                        linkerExe = ClangForApple.Settings.IsAppleClang ? "ld" : "ld64.lld" + exeExtension;
                 }
 
                 string librarianExe;
                 if (!fastBuildSettings.LibrarianExe.TryGetValue(devEnv, out librarianExe))
-                {
-                    if (Util.GetExecutingPlatform() == Platform.win64)
-                        librarianExe = "llvm-ar.exe";
-                    else
-                        librarianExe = "ar";
-                }
+                    librarianExe = ClangForApple.Settings.IsAppleClang ? "ar" : "llvm-ar" + exeExtension;
 
                 configurations.Add(configName,
                     new CompilerSettings.Configuration(
@@ -513,7 +608,7 @@ namespace Sharpmake
 
             if (conf.IsFastBuild)
             {
-                options["FastBuildTarget"] = Bff.GetShortProjectName(project, conf);
+                options["FastBuildTarget"] = FastBuildSettings.MakeCommandGenerator.GetTargetIdentifier(conf);
             }
             else
             {
@@ -675,10 +770,11 @@ namespace Sharpmake
             );
 
             context.SelectOption(
-                Options.Option(Options.XCode.Compiler.SwiftLanguageVersion.Disable, () => options["SwiftVersion"] = FileGeneratorUtilities.RemoveLineTag),
-                Options.Option(Options.XCode.Compiler.SwiftLanguageVersion.SWIFT4_0, () => options["SwiftVersion"] = "4.0"),
-                Options.Option(Options.XCode.Compiler.SwiftLanguageVersion.SWIFT4_2, () => options["SwiftVersion"] = "4.2"),
-                Options.Option(Options.XCode.Compiler.SwiftLanguageVersion.SWIFT5_0, () => options["SwiftVersion"] = "5.0")
+                Options.Option(Options.XCode.Compiler.SwiftLanguageVersion.Disable, () => { options["SwiftVersion"] = FileGeneratorUtilities.RemoveLineTag; cmdLineOptions["SwiftLanguageVersion"] = FileGeneratorUtilities.RemoveLineTag; }),
+                Options.Option(Options.XCode.Compiler.SwiftLanguageVersion.SWIFT4_0, () => { options["SwiftVersion"] = "4.0"; cmdLineOptions["SwiftLanguageVersion"] = "-swift-version 4"; }),
+                Options.Option(Options.XCode.Compiler.SwiftLanguageVersion.SWIFT4_2, () => { options["SwiftVersion"] = "4.2"; cmdLineOptions["SwiftLanguageVersion"] = "-swift-version 4.2"; }),
+                Options.Option(Options.XCode.Compiler.SwiftLanguageVersion.SWIFT5_0, () => { options["SwiftVersion"] = "5.0"; cmdLineOptions["SwiftLanguageVersion"] = "-swift-version 5"; }),
+                Options.Option(Options.XCode.Compiler.SwiftLanguageVersion.SWIFT6_0, () => { options["SwiftVersion"] = "6.0"; cmdLineOptions["SwiftLanguageVersion"] = "-swift-version 6"; })
             );
 
             options["DevelopmentTeam"] = Options.StringOption.Get<Options.XCode.Compiler.DevelopmentTeam>(conf);
@@ -718,20 +814,28 @@ namespace Sharpmake
             }
 #pragma warning restore 618
 
+            bool anyExceptionEnabled = false;
             context.SelectOption(
-                Options.Option(Options.XCode.Compiler.CppExceptions.Disable, () => { options["CppExceptionHandling"] = "NO"; cmdLineOptions["CppExceptions"] = FileGeneratorUtilities.RemoveLineTag; }),
-                Options.Option(Options.XCode.Compiler.CppExceptions.Enable, () => { options["CppExceptionHandling"] = "YES"; cmdLineOptions["CppExceptions"] = "-fcxx-exceptions"; })
+                Options.Option(Options.XCode.Compiler.CppExceptions.Disable, () => { options["CppExceptionHandling"] = "NO"; cmdLineOptions["CppExceptions"] = "-fno-cxx-exceptions"; }),
+                Options.Option(Options.XCode.Compiler.CppExceptions.Enable, () => { options["CppExceptionHandling"] = "YES"; cmdLineOptions["CppExceptions"] = "-fcxx-exceptions"; anyExceptionEnabled = true; })
             );
 
             context.SelectOption(
-                Options.Option(Options.XCode.Compiler.ObjCExceptions.Disable, () => { options["ObjCExceptionHandling"] = "NO"; cmdLineOptions["ObjCExceptions"] = FileGeneratorUtilities.RemoveLineTag; }),
-                Options.Option(Options.XCode.Compiler.ObjCExceptions.Enable, () => { options["ObjCExceptionHandling"] = "YES"; cmdLineOptions["ObjCExceptions"] = "-fobjc-exceptions"; })
+                Options.Option(Options.XCode.Compiler.ObjCExceptions.Disable, () => { options["ObjCExceptionHandling"] = "NO"; cmdLineOptions["ObjCExceptions"] = "-fno-objc-exceptions"; }),
+                Options.Option(Options.XCode.Compiler.ObjCExceptions.Enable, () => { options["ObjCExceptionHandling"] = "YES"; cmdLineOptions["ObjCExceptions"] = "-fobjc-exceptions"; anyExceptionEnabled = true; })
             );
 
             context.SelectOption(
-                Options.Option(Options.XCode.Compiler.ObjCARCExceptions.Disable, () => { options["ObjCARCExceptionHandling"] = "NO"; cmdLineOptions["ObjCARCExceptions"] = FileGeneratorUtilities.RemoveLineTag; }),
-                Options.Option(Options.XCode.Compiler.ObjCARCExceptions.Enable, () => { options["ObjCARCExceptionHandling"] = "YES"; cmdLineOptions["ObjCARCExceptions"] = "-fobjc-arc-exceptions"; })
+                Options.Option(Options.XCode.Compiler.ObjCARCExceptions.Disable, () => { options["ObjCARCExceptionHandling"] = "NO"; cmdLineOptions["ObjCARCExceptions"] = "-fno-objc-arc-exceptions"; }),
+                Options.Option(Options.XCode.Compiler.ObjCARCExceptions.Enable, () => { options["ObjCARCExceptionHandling"] = "YES"; cmdLineOptions["ObjCARCExceptions"] = "-fobjc-arc-exceptions"; anyExceptionEnabled = true; })
             );
+
+            context.SelectOption(
+                Options.Option(Options.XCode.Compiler.AsyncExceptions.Disable, () => { cmdLineOptions["AsyncExceptionHandling"] = "-fno-objc-arc-exceptions"; }),
+                Options.Option(Options.XCode.Compiler.AsyncExceptions.Enable, () => { cmdLineOptions["AsyncExceptionHandling"] = "-fobjc-arc-exceptions"; anyExceptionEnabled = true; })
+            );
+
+            cmdLineOptions["DisableExceptions"] = anyExceptionEnabled ? FileGeneratorUtilities.RemoveLineTag : "-fno-exceptions";
 
             context.SelectOption(
                 Options.Option(Options.XCode.Compiler.GccNoCommonBlocks.Disable, () => options["GccNoCommonBlocks"] = "NO"),
@@ -766,20 +870,20 @@ namespace Sharpmake
 
             context.SelectOption
             (
-                Options.Option(Options.XCode.Compiler.OptimizationLevel.Disable, () => { cmdLineOptions["OptimizationLevel"] = "-O0"; }),
-                Options.Option(Options.XCode.Compiler.OptimizationLevel.Fast, () => { cmdLineOptions["OptimizationLevel"] = "-O1"; }),
-                Options.Option(Options.XCode.Compiler.OptimizationLevel.Faster, () => { cmdLineOptions["OptimizationLevel"] = "-O2"; }),
-                Options.Option(Options.XCode.Compiler.OptimizationLevel.Fastest, () => { cmdLineOptions["OptimizationLevel"] = "-O3"; }),
-                Options.Option(Options.XCode.Compiler.OptimizationLevel.Smallest, () => { cmdLineOptions["OptimizationLevel"] = "-Os"; }),
-                Options.Option(Options.XCode.Compiler.OptimizationLevel.Aggressive, () => { cmdLineOptions["OptimizationLevel"] = "-Ofast"; }),
-                Options.Option(Options.XCode.Compiler.OptimizationLevel.AggressiveSize, () => { cmdLineOptions["OptimizationLevel"] = "-Oz"; })
+                Options.Option(Options.XCode.Compiler.OptimizationLevel.Disable, () => { cmdLineOptions["OptimizationLevel"] = "-O0"; cmdLineOptions["SwiftOptimizationLevel"] = "-Onone"; }),
+                Options.Option(Options.XCode.Compiler.OptimizationLevel.Fast, () => { cmdLineOptions["OptimizationLevel"] = "-O1"; cmdLineOptions["SwiftOptimizationLevel"] = "-O"; }),
+                Options.Option(Options.XCode.Compiler.OptimizationLevel.Faster, () => { cmdLineOptions["OptimizationLevel"] = "-O2"; cmdLineOptions["SwiftOptimizationLevel"] = "-O"; }),
+                Options.Option(Options.XCode.Compiler.OptimizationLevel.Fastest, () => { cmdLineOptions["OptimizationLevel"] = "-O3"; cmdLineOptions["SwiftOptimizationLevel"] = "-O"; }),
+                Options.Option(Options.XCode.Compiler.OptimizationLevel.Smallest, () => { cmdLineOptions["OptimizationLevel"] = "-Os"; cmdLineOptions["SwiftOptimizationLevel"] = "-O"; }),
+                Options.Option(Options.XCode.Compiler.OptimizationLevel.Aggressive, () => { cmdLineOptions["OptimizationLevel"] = "-Ofast"; cmdLineOptions["SwiftOptimizationLevel"] = "-O"; }),
+                Options.Option(Options.XCode.Compiler.OptimizationLevel.AggressiveSize, () => { cmdLineOptions["OptimizationLevel"] = "-Oz"; cmdLineOptions["SwiftOptimizationLevel"] = "-O"; })
             );
 
             context.SelectOption(
-                Options.Option(Options.XCode.Compiler.DeadStrip.Disable, () => { options["DeadStripping"] = "NO"; options["PrivateInlines"] = "NO"; cmdLineOptions["DeadCodeStripping"] = FileGeneratorUtilities.RemoveLineTag; }),
-                Options.Option(Options.XCode.Compiler.DeadStrip.Code, () => { options["DeadStripping"] = "YES"; options["PrivateInlines"] = "NO"; cmdLineOptions["DeadCodeStripping"] = "-dead_strip"; }),
-                Options.Option(Options.XCode.Compiler.DeadStrip.Inline, () => { options["DeadStripping"] = "NO"; options["PrivateInlines"] = "YES"; cmdLineOptions["DeadCodeStripping"] = "-fvisibility-inlines-hidden"; }),
-                Options.Option(Options.XCode.Compiler.DeadStrip.All, () => { options["DeadStripping"] = "YES"; options["PrivateInlines"] = "YES"; cmdLineOptions["DeadCodeStripping"] = "-dead_strip -fvisibility-inlines-hidden"; })
+                Options.Option(Options.XCode.Compiler.DeadStrip.Disable, () => { options["DeadStripping"] = "NO"; options["PrivateInlines"] = "NO"; cmdLineOptions["DeadCodeStripping"] = FileGeneratorUtilities.RemoveLineTag; cmdLineOptions["PrivateInlines"] = FileGeneratorUtilities.RemoveLineTag; }),
+                Options.Option(Options.XCode.Compiler.DeadStrip.Code, () => { options["DeadStripping"] = "YES"; options["PrivateInlines"] = "NO"; cmdLineOptions["DeadCodeStripping"] = "-dead_strip"; cmdLineOptions["PrivateInlines"] = FileGeneratorUtilities.RemoveLineTag; }),
+                Options.Option(Options.XCode.Compiler.DeadStrip.Inline, () => { options["DeadStripping"] = "NO"; options["PrivateInlines"] = "YES"; cmdLineOptions["DeadCodeStripping"] = FileGeneratorUtilities.RemoveLineTag; cmdLineOptions["PrivateInlines"] = "-fvisibility-inlines-hidden"; }),
+                Options.Option(Options.XCode.Compiler.DeadStrip.All, () => { options["DeadStripping"] = "YES"; options["PrivateInlines"] = "YES"; cmdLineOptions["DeadCodeStripping"] = "-dead_strip"; cmdLineOptions["PrivateInlines"] = "-fvisibility-inlines-hidden"; })
                 );
 
 
@@ -875,10 +979,6 @@ namespace Sharpmake
             }
 
             options["ProvisioningProfile"] = Options.StringOption.Get<Options.XCode.Compiler.ProvisioningProfile>(conf);
-
-            Options.XCode.Compiler.SDKRoot sdkRoot = Options.GetObject<Options.XCode.Compiler.SDKRoot>(conf);
-            if (sdkRoot != null)
-                options["SDKRoot"] = sdkRoot.Value;
 
             context.SelectOption(
                 Options.Option(Options.XCode.Compiler.SkipInstall.Disable, () => options["SkipInstall"] = "NO"),
@@ -1060,6 +1160,8 @@ namespace Sharpmake
                 Options.Option(Options.XCode.Compiler.SwiftEmitLocStrings.Enable, () => options["SwiftEmitLocStrings"] = "YES")
             );
 
+            cmdLineOptions["SwiftModuleName"] = Options.StringOption.Get<Options.XCode.Compiler.SwiftModuleName>(conf);
+
             context.SelectOption(
                 Options.Option(Options.XCode.Compiler.MetalFastMath.Disable, () => options["MetalFastMath"] = "NO"),
                 Options.Option(Options.XCode.Compiler.MetalFastMath.Enable, () => options["MetalFastMath"] = "YES")
@@ -1199,8 +1301,7 @@ namespace Sharpmake
             var conf = context.Configuration;
             var cmdLineOptions = context.CommandLineOptions;
 
-            Options.XCode.Compiler.SDKRoot customSdkRoot = Options.GetObject<Options.XCode.Compiler.SDKRoot>(conf);
-            cmdLineOptions["SysLibRoot"] = (IsLinkerInvokedViaCompiler ? "-isysroot " : "-syslibroot ") + (customSdkRoot?.Value ?? defaultSdkRoot);
+            cmdLineOptions["SysLibRoot"] = (IsLinkerInvokedViaCompiler ? "-isysroot " : "-syslibroot ") + defaultSdkRoot;
         }
 
         public virtual void SelectLinkerOptions(IGenerationContext context)
@@ -1328,6 +1429,11 @@ namespace Sharpmake
         }
 
         public void GenerateProjectMasmVcxproj(IVcxprojGenerationContext context, IFileGenerator generator)
+        {
+            throw new NotImplementedException(SimplePlatformString + " should not be called by a Vcxproj generator");
+        }
+
+        public void GenerateProjectNasmVcxproj(IVcxprojGenerationContext context, IFileGenerator generator)
         {
             throw new NotImplementedException(SimplePlatformString + " should not be called by a Vcxproj generator");
         }

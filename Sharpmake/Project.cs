@@ -104,8 +104,8 @@ namespace Sharpmake
         public Strings PreFilterSourceFiles { get { return _preFilterSourceFiles; } }
 
 
-        public Strings SourceFilesExtensions = new Strings(".cpp", ".c", ".cc", ".h", ".inl", ".hpp", ".hh", ".asm");// All files under SourceRootPath are evaluated, if match found, it will be added to SourceFiles
-        public Strings SourceFilesCompileExtensions = new Strings(".cpp", ".cc", ".c", ".asm");         // File that match this regex compile
+        public Strings SourceFilesExtensions = new Strings(".cpp", ".c", ".cc", ".h", ".inl", ".hpp", ".hh", ".asm", ".nasm");// All files under SourceRootPath are evaluated, if match found, it will be added to SourceFiles
+        public Strings SourceFilesCompileExtensions = new Strings(".cpp", ".cc", ".c", ".asm", ".nasm");         // File that match this regex compile
         public Strings SourceFilesCPPExtensions = new Strings(".cpp", ".cc");
 
         public Strings SourceFilesFilters = null;                                        // if !=  null, include only file in this filter
@@ -229,6 +229,11 @@ namespace Sharpmake
         public Strings CustomPropsFiles = new Strings();  // vs2010+ .props files
         public Strings CustomTargetsFiles = new Strings();  // vs2010+ .targets files
 
+        public string NasmPropsFile = "";
+        public string NasmTargetsFile = "";
+        public string NasmExePath = "";
+        public Strings NasmPreIncludedFiles = new Strings();
+
         public Strings LibraryPathsExcludeFromWarningRegex = new Strings();                 // Library paths where we want to ignore the path doesn't exist warning
         public Strings IncludePathsExcludeFromWarningRegex = new Strings();                 // Include paths where we want to ignore the path doesn't exist warning
 
@@ -240,6 +245,7 @@ namespace Sharpmake
         public Dictionary<string, string> CustomFilterMapping = new Dictionary<string, string>();  /// maps relative source directory to a custom filter path for vcxproj.filter files
 
         public bool ContainsASM = false;
+        public bool ContainsNASM = false;
 
         // Some projects don't support changelist filter. and will generate build errors when trying to compile the resulting projects.
         public bool SkipProjectWhenFiltersActive = false;
@@ -368,11 +374,29 @@ namespace Sharpmake
             }
         }
 
-        private bool _deployProject = false;
+        [Obsolete("DeployProject is obsolete, use DeployProjectType instead (DeployType.OnlyIfBuild for the case where DeployProject == true)", false)]
         public bool DeployProject
         {
-            get { return _deployProject; }
-            set { SetProperty(ref _deployProject, value); }
+            get { return DeployProjectType != DeployType.NoDeploy; }
+            set { SetProperty(ref _deployProjectType, value ? DeployType.OnlyIfBuild : DeployType.NoDeploy); }
+        }
+
+        public enum DeployType
+        {
+            // The project would not be deployed.
+            NoDeploy,
+            // The project will be deployed only if it explicitly marked for build in visual studio
+            // (which is true for exe, but could be turned off automatically if FastBuildAll project is generated). 
+            OnlyIfBuild,
+            // The project will be always deployed.
+            AlwaysDeploy
+        }
+
+        private DeployType _deployProjectType = DeployType.NoDeploy;
+        public DeployType DeployProjectType
+        {
+            get { return _deployProjectType; }
+            set { SetProperty(ref _deployProjectType, value); }
         }
 
         public static int BlobCleaned { get; private set; }
@@ -1213,7 +1237,10 @@ namespace Sharpmake
                 if (sourceFile.EndsWith(".asm", StringComparison.OrdinalIgnoreCase))
                 {
                     ContainsASM = true;
-                    break;
+                }
+                if (sourceFile.EndsWith(".nasm", StringComparison.OrdinalIgnoreCase))
+                {
+                    ContainsNASM = true;
                 }
             }
 
@@ -1605,7 +1632,6 @@ namespace Sharpmake
             foreach (Project.Configuration conf in Configurations)
             {
                 dependencies.UnionWith(conf.UnResolvedPublicDependencies.Keys);
-                dependencies.UnionWith(conf.UnResolvedProtectedDependencies.Keys);
                 dependencies.UnionWith(conf.UnResolvedPrivateDependencies.Keys);
             }
             return dependencies;
@@ -1659,6 +1685,8 @@ namespace Sharpmake
             ConfigurationType = configurationType;
 
             ExtensionBuildTools[".asm"] = "MASM";
+            ExtensionBuildTools[".nasm"] = "NASM";
+
             ClassName = GetType().Name;
             FullClassName = GetType().FullName;
             Targets.Initialize(targetType);
@@ -1973,8 +2001,7 @@ namespace Sharpmake
                     if (!file.EndsWith(BlobExtension, StringComparison.OrdinalIgnoreCase))
                         files.Add(file);
 
-                    string fileNameLC = file.ToLower();
-                    s_capitalizedMapFiles.TryAdd(fileNameLC, file);
+                    Util.RegisterCapitalizedPath(file);
                 }
                 s_cachedDirectoryFiles[directoryCapitalizedFullName] = files;
             }
@@ -1993,19 +2020,9 @@ namespace Sharpmake
         private bool _resolvedDependencies = false;
         private static ConcurrentDictionary<string, List<string>> s_cachedDirectoryFiles = new ConcurrentDictionary<string, List<string>>();
 
-        // use as cache because Util.GetProperFilePathCapitalization is slow
-        private static ConcurrentDictionary<string, string> s_capitalizedMapFiles = new ConcurrentDictionary<string, string>();
-
         public static string GetCapitalizedFile(string file)
         {
-            string filenameLC = file.ToLower();
-            string capitalizedFile;
-            if (!s_capitalizedMapFiles.TryGetValue(filenameLC, out capitalizedFile))
-            {
-                capitalizedFile = Util.GetCapitalizedPath(file);
-                s_capitalizedMapFiles.TryAdd(filenameLC, capitalizedFile);
-            }
-            return capitalizedFile;
+            return Util.GetCapitalizedPath(file);
         }
 
         #endregion

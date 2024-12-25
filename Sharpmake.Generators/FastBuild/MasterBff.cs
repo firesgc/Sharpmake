@@ -641,23 +641,20 @@ namespace Sharpmake.Generators.FastBuild
 
             string envRemoveGuards = FileGeneratorUtilities.RemoveLineTag;
             string fastBuildEnvironments = string.Empty;
-            if (allDevEnv.Contains(DevEnv.xcode))
-            {
-                // we'll keep the #if guards if we have other devenv in the file
-                if (allDevEnv.Count > 1)
-                {
-                    envRemoveGuards = string.Empty;
-                    fastBuildEnvironments += Bff.Template.ConfigurationFile.WinEnvironment;
-                }
 
-                if (Util.GetExecutingPlatform() == Platform.win64)
-                    fastBuildEnvironments += Bff.Template.ConfigurationFile.OsxEnvironmentOnWindows;
-                else
-                    fastBuildEnvironments += Bff.Template.ConfigurationFile.OsxEnvironment;
-            }
-            else
+            switch (Util.GetExecutingPlatform())
             {
-                fastBuildEnvironments += Bff.Template.ConfigurationFile.WinEnvironment;
+                case Platform.win64:
+                    fastBuildEnvironments += Bff.Template.ConfigurationFile.WinEnvironment;
+                    break;
+                case Platform.mac:
+                    fastBuildEnvironments += Bff.Template.ConfigurationFile.OsxEnvironment;
+                    break;
+                case Platform.linux:
+                    fastBuildEnvironments += Bff.Template.ConfigurationFile.LinuxEnvironment;
+                    break;
+                default:
+                    throw new NotImplementedException($"Environment variables bff config not implemented for platform {Util.GetExecutingPlatform()}");
             }
 
             string envAdditionalVariables = FileGeneratorUtilities.RemoveLineTag;
@@ -749,6 +746,11 @@ namespace Sharpmake.Generators.FastBuild
                         using (masterBffGenerator.Declare("fastBuildResourceCompilerName", compConf.ResourceCompiler != FileGeneratorUtilities.RemoveLineTag ? "RC" + compilerConfiguration.Key : FileGeneratorUtilities.RemoveLineTag))
                         using (masterBffGenerator.Declare("fastBuildMasmCompiler", compConf.Masm))
                         using (masterBffGenerator.Declare("fastBuildMasmCompilerName", "ML" + compilerConfiguration.Key))
+
+                        // TODOANT make sure we have nasm compiler found and used.
+                        using (masterBffGenerator.Declare("fastBuildNasmCompiler", compConf.Nasm))
+                        using (masterBffGenerator.Declare("fastBuildNasmCompilerName", "Nasm" + compilerConfiguration.Key))
+
                         using (masterBffGenerator.Declare("fastBuildCompilerName", compConf.Compiler != FileGeneratorUtilities.RemoveLineTag ? compConf.Compiler : compiler.Key))
                         using (masterBffGenerator.Declare("fastBuildLibrarian", compConf.Librarian))
                         using (masterBffGenerator.Declare("fastBuildLinker", compConf.Linker))
@@ -762,6 +764,10 @@ namespace Sharpmake.Generators.FastBuild
 
                             if (!string.IsNullOrEmpty(compConf.Masm))
                                 masterBffGenerator.Write(Bff.Template.ConfigurationFile.MasmCompilerSettings);
+
+                            // TODOANT
+                            if (!string.IsNullOrEmpty(compConf.Nasm))
+                                masterBffGenerator.Write(Bff.Template.ConfigurationFile.NasmCompilerSettings);
 
                             masterBffGenerator.Write(Bff.Template.ConfigurationFile.CompilerConfiguration);
                         }

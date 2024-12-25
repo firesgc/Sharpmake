@@ -10,12 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Sharpmake.Generators.VisualStudio;
-using static Sharpmake.DebugBreaks;
-using static Sharpmake.Generators.VisualStudio.CSproj;
-using static Sharpmake.Options;
-using static Sharpmake.Options.CSharp;
 
 namespace Sharpmake.Generators.FastBuild
 {
@@ -177,6 +172,39 @@ namespace Sharpmake.Generators.FastBuild
         // ===================================================================================
         // BFF Generation
         // ===================================================================================
+        [Flags]
+        private enum Languages
+        {
+            None = 0,
+            Asm = 1,
+            C = 2,
+            CPP = 4,
+            ObjC = 8,
+            ObjCPP = 16,
+            Swift = 32,
+            Nasm = 64
+        }
+
+        [Flags]
+        private enum LanguageFeatures
+        {
+            None = 0,
+            ConsumeWinRTExtensions = 1,
+            CLR = 2,
+            NonCLR = 4 // TODO: remove this
+        }
+
+        private struct SubConfig
+        {
+            public SubConfig()
+            { }
+
+            public bool IsUsePrecomp = true;
+            public Languages Languages = Languages.None;
+            public LanguageFeatures LanguageFeatures = LanguageFeatures.None;
+            public Options.Vc.Compiler.Exceptions Exceptions = Options.Vc.Compiler.Exceptions.Disable;
+        }
+
         public void Generate(
             Builder builder,
             Project project,
@@ -200,7 +228,7 @@ namespace Sharpmake.Generators.FastBuild
             var context = new BffGenerationContext(builder, project, projectPath, configurations);
             string projectBffFile = Bff.GetBffFileName(projectPath, firstConf.BffFileName); // TODO: bff file name could be different per conf, hence we would generate more than one file
             List<Vcxproj.ProjectFile> filesInNonDefaultSection;
-            Dictionary<Project.Configuration, Dictionary<Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>>, List<Vcxproj.ProjectFile>>> confSourceFiles;
+            Dictionary<Project.Configuration, Dictionary<SubConfig, List<Vcxproj.ProjectFile>>> confSourceFiles;
             using (builder.CreateProfilingScope("BffGenerator.Generate:GetGeneratedFiles"))
             {
                 confSourceFiles = GetGeneratedFiles(context, configurations, out filesInNonDefaultSection);
@@ -255,8 +283,9 @@ namespace Sharpmake.Generators.FastBuild
 
             int configIndex = 0;
 
-            var defaultTuple = GetDefaultTupleConfig();
             var allFileCustomBuild = new Dictionary<string, Project.Configuration.CustomFileBuildStepData>();
+
+            Dictionary<string, bool> confBffHasMasters = new Dictionary<string, bool>();
 
             var configurationsToBuild = confSourceFiles.Keys.OrderBy(x => x.Platform).ToList();
             foreach (Project.Configuration conf in configurationsToBuild)
@@ -266,8 +295,14 @@ namespace Sharpmake.Generators.FastBuild
 
                 var platformBff = PlatformRegistry.Get<IPlatformBff>(conf.Platform);
                 var clangPlatformBff = PlatformRegistry.Query<IClangPlatformBff>(conf.Platform);
+                var applePlatformBff = PlatformRegistry.Query<IApplePlatformBff>(conf.Platform);
                 var microsoftPlatformBff = PlatformRegistry.Query<IMicrosoftPlatformBff>(conf.Platform);
                 var dotNetConf = Util.IsDotNet(conf);
+
+                if (conf.FastBuildMasterBffList.Any())
+                    confBffHasMasters[conf.BffFullFileName] = true;
+                else
+                    confBffHasMasters.TryAdd(conf.BffFullFileName, false);
 
                 // TODO: really not ideal, refactor and move the properties we need from it someplace else
                 var vcxprojPlatform = PlatformRegistry.Query<IPlatformVcxproj>(conf.Platform);
@@ -310,22 +345,24 @@ namespace Sharpmake.Generators.FastBuild
                     var dependenciesInfo = dependenciesInfoPerConf[conf];
                     OrderableStrings additionalDependencies = dependenciesInfo.AdditionalDependencies;
 
-                    foreach (var tuple in confSubConfigs.Keys)
+                    foreach (var subConfig in confSubConfigs.Keys)
                     {
                         var scopedOptions = new List<Options.ScopedOption>();
 
-                        bool isDefaultTuple = defaultTuple.Equals(tuple);
+                        bool isDefaultSubConfig = s_DefaultSubConfig.Equals(subConfig);
 
-                        bool isUsePrecomp = tuple.Item1 && conf.PrecompSource != null;
-                        bool isCompileAsCFile = tuple.Item2;
-                        bool isCompileAsCPPFile = tuple.Item3;
-                        bool isCompileAsCLRFile = tuple.Item4;
-                        bool isConsumeWinRTExtensions = tuple.Item5 || (Options.GetObject<Options.Vc.Compiler.CompileAsWinRT>(conf) == Options.Vc.Compiler.CompileAsWinRT.Enable);
-                        bool isASMFileSection = tuple.Item6;
-                        Options.Vc.Compiler.Exceptions exceptionsSetting = tuple.Item7;
-                        bool isCompileAsNonCLRFile = tuple.Rest.Item1;
-                        bool isCompileAsObjCFile = tuple.Rest.Item2;
-                        bool isCompileAsObjCPPFile = tuple.Rest.Item3;
+                        bool isUsePrecomp = subConfig.IsUsePrecomp && conf.PrecompSource != null;
+                        bool isCompileAsCFile = subConfig.Languages.HasFlag(Languages.C);
+                        bool isCompileAsCPPFile = subConfig.Languages.HasFlag(Languages.CPP);
+                        bool isCompileAsObjCFile = subConfig.Languages.HasFlag(Languages.ObjC);
+                        bool isCompileAsObjCPPFile = subConfig.Languages.HasFlag(Languages.ObjCPP);
+                        bool isCompileAsSwiftFile = subConfig.Languages.HasFlag(Languages.Swift);
+                        bool isASMFileSection = subConfig.Languages.HasFlag(Languages.Asm);
+                        bool isNASMFileSection = subConfig.Languages.HasFlag(Languages.Nasm);
+                        bool isCompileAsCLRFile = subConfig.LanguageFeatures.HasFlag(LanguageFeatures.CLR);
+                        bool isCompileAsNonCLRFile = subConfig.LanguageFeatures.HasFlag(LanguageFeatures.NonCLR);
+                        bool isConsumeWinRTExtensions = subConfig.LanguageFeatures.HasFlag(LanguageFeatures.ConsumeWinRTExtensions) || (Options.GetObject<Options.Vc.Compiler.CompileAsWinRT>(conf) == Options.Vc.Compiler.CompileAsWinRT.Enable);
+                        Options.Vc.Compiler.Exceptions exceptionsSetting = subConfig.Exceptions;
 
                         bool isFirstSubConfig = subConfigIndex == 0;
                         bool isLastSubConfig = subConfigIndex == confSubConfigs.Keys.Count - 1;
@@ -338,7 +375,7 @@ namespace Sharpmake.Generators.FastBuild
                         }
 
                         // For now, this will do.
-                        if (conf.FastBuildBlobbed && isDefaultTuple && !isUnity)
+                        if (conf.FastBuildBlobbed && isDefaultSubConfig && !isUnity)
                         {
                             isUnity = true;
                         }
@@ -508,6 +545,7 @@ namespace Sharpmake.Generators.FastBuild
                         string fastBuildPCHForceInclude = FileGeneratorUtilities.RemoveLineTag;
                         string fastBuildCompilerPCHOptions = isUsePrecomp ? Template.ConfigurationFile.UsePrecomp : FileGeneratorUtilities.RemoveLineTag;
                         string fastBuildCompilerPCHOptionsClang = isUsePrecomp ? Template.ConfigurationFile.UsePrecompClang : FileGeneratorUtilities.RemoveLineTag;
+                        string fastBuildCompilerDeoptimizeOptionClang = isCompileAsSwiftFile ? "-Onone" : "-O0";
                         string fastBuildLinkerOutputFile = fastBuildOutputFile;
                         string fastBuildStampExecutable = FileGeneratorUtilities.RemoveLineTag;
                         string fastBuildStampArguments = FileGeneratorUtilities.RemoveLineTag;
@@ -624,13 +662,13 @@ namespace Sharpmake.Generators.FastBuild
 
                             if (conf.Output != Project.Configuration.OutputType.Dll && conf.Output != Project.Configuration.OutputType.Exe && conf.Output != Project.Configuration.OutputType.AppleApp)
                             {
-                                foreach (var subConfig in subConfigObjectList)
+                                foreach (var subConfigObject in subConfigObjectList)
                                 {
                                     string subTarget;
                                     if (useObjectLists)
-                                        subTarget = subConfig + "_objects";
+                                        subTarget = subConfigObject + "_objects";
                                     else
-                                        subTarget = subConfig + "_" + outputType;
+                                        subTarget = subConfigObject + "_" + outputType;
 
                                     if (!fastBuildTargetSubTargets.Contains(subTarget))
                                         fastBuildTargetSubTargets.Add(subTarget);
@@ -697,6 +735,12 @@ namespace Sharpmake.Generators.FastBuild
 
                             fastBuildSourceFileType = "";
                         }
+                        else if (isCompileAsSwiftFile)
+                        {
+                            clangFileLanguage = "";
+                            fastBuildUsingPlatformConfig = applePlatformBff.SwiftConfigName(conf);
+                            fastBuildSourceFileType = "";
+                        }
                         else
                         {
                             // Do not take C Language conformance into account while compiling in Cpp
@@ -715,27 +759,47 @@ namespace Sharpmake.Generators.FastBuild
                             fastBuildUsingPlatformConfig = platformBff.CppConfigName(conf);
                         }
 
+                        // TODOANT: Add nasm/masm change
                         if (isASMFileSection)
                         {
                             fastBuildUsingPlatformConfig += Template.ConfigurationFile.MasmConfigNameSuffix;
                         }
+                        if (isNASMFileSection)
+                        {
+                            fastBuildUsingPlatformConfig += Template.ConfigurationFile.NasmConfigNameSuffix;
+                        }
 
-                        string fastBuildCompilerExtraOptions = !isASMFileSection ? Template.ConfigurationFile.CPPCompilerExtraOptions : Template.ConfigurationFile.MasmCompilerExtraOptions;
+                        string fastBuildCompilerExtraOptions = Template.ConfigurationFile.CPPCompilerExtraOptions;
+                        if (isASMFileSection)
+                        {
+                            fastBuildCompilerExtraOptions = Template.ConfigurationFile.MasmCompilerExtraOptions;
+                        }
+                        if (isNASMFileSection)
+                        {
+                            fastBuildCompilerExtraOptions = Template.ConfigurationFile.NasmCompilerExtraOptions;
+                        }
+
                         string fastBuildCompilerOptionsDeoptimize = FileGeneratorUtilities.RemoveLineTag;
                         if (!isASMFileSection && conf.FastBuildDeoptimization != Project.Configuration.DeoptimizationWritableFiles.NoDeoptimization)
                             fastBuildCompilerOptionsDeoptimize = Template.ConfigurationFile.CPPCompilerOptionsDeoptimize;
 
-                        string compilerOptions = !isASMFileSection ? Template.ConfigurationFile.CompilerOptionsCPP : Template.ConfigurationFile.CompilerOptionsMasm;
+                        string compilerOptions = Template.ConfigurationFile.CompilerOptionsCPP;
+                        if (isASMFileSection)
+                        {
+                            compilerOptions = Template.ConfigurationFile.CompilerOptionsMasm;
+                        }
+                        if (isNASMFileSection)
+                        {
+                            compilerOptions = Template.ConfigurationFile.CompilerOptionsNasm;
+                        }
                         compilerOptions += Template.ConfigurationFile.CompilerOptionsCommon;
 
-                        string compilerOptionsClang = Template.ConfigurationFile.CompilerOptionsClang +
-                                                        Template.ConfigurationFile.CompilerOptionsCommon;
-
-                        string compilerOptionsClangDeoptimized = FileGeneratorUtilities.RemoveLineTag;
-                        if (conf.FastBuildDeoptimization != Project.Configuration.DeoptimizationWritableFiles.NoDeoptimization)
-                            compilerOptionsClangDeoptimized =
-                                Template.ConfigurationFile.ClangCompilerOptionsDeoptimize +
-                                Template.ConfigurationFile.CompilerOptionsCommon;
+                        string compilerOptionsClang = Template.ConfigurationFile.CompilerOptionsClang;
+                        if (isNASMFileSection)
+                        {
+                            compilerOptionsClang = Template.ConfigurationFile.CompilerOptionsNasm;
+                        }
+                        compilerOptionsClang += Template.ConfigurationFile.CompilerOptionsCommon;
 
                         string fastBuildDeoptimizationWritableFiles = null;
                         string fastBuildDeoptimizationWritableFilesWithToken = null;
@@ -892,7 +956,7 @@ namespace Sharpmake.Generators.FastBuild
                         string fastBuildInputExcludedFiles = FileGeneratorUtilities.RemoveLineTag;
                         {
                             Strings excludedSourceFiles = new Strings();
-                            if (isNoBlobImplicitConfig && isDefaultTuple)
+                            if (isNoBlobImplicitConfig && isDefaultSubConfig)
                             {
                                 fullInputPaths.Add(context.ProjectSourceCapitalized);
                                 fullInputPaths.AddRange(project.AdditionalSourceRootPaths.Select(Util.GetCapitalizedPath));
@@ -900,7 +964,7 @@ namespace Sharpmake.Generators.FastBuild
                                 excludedSourceFiles.AddRange(filesInNonDefaultSection.Select(f => f.FileName));
                             }
 
-                            if (isDefaultTuple && conf.FastBuildBlobbingStrategy == Project.Configuration.InputFileStrategy.Exclude && conf.FastBuildBlobbed)
+                            if (isDefaultSubConfig && conf.FastBuildBlobbingStrategy == Project.Configuration.InputFileStrategy.Exclude && conf.FastBuildBlobbed)
                             {
                                 // Adding the folders excluded from unity to the folders to build without unity(building each file individually)
                                 fullInputPaths.AddRange(project.SourcePathsBlobExclude.Select(Util.GetCapitalizedPath));
@@ -957,7 +1021,7 @@ namespace Sharpmake.Generators.FastBuild
                             List<string> fastbuildResourceFilesList = new List<string>();
                             List<string> fastbuildEmbeddedResourceFilesList = new List<string>();
 
-                            var sourceFiles = confSubConfigs[tuple];
+                            var sourceFiles = confSubConfigs[subConfig];
                             foreach (var sourceFile in sourceFiles)
                             {
                                 string sourceFileName = CurrentBffPathKeyCombine(sourceFile.FileNameProjectRelative);
@@ -1099,6 +1163,7 @@ namespace Sharpmake.Generators.FastBuild
                                     using (bffGenerator.Declare("fastBuildObjectListEmbeddedResources", fastBuildObjectListEmbeddedResources))
                                     using (bffGenerator.Declare("fastBuildCompilerPCHOptions", fastBuildCompilerPCHOptions))
                                     using (bffGenerator.Declare("fastBuildCompilerPCHOptionsClang", fastBuildCompilerPCHOptionsClang))
+                                    using (bffGenerator.Declare("fastBuildCompilerDeoptimizeOptionClang", fastBuildCompilerDeoptimizeOptionClang))
                                     using (bffGenerator.Declare("fastBuildPCHForceInclude", isUsePrecomp ? fastBuildPCHForceInclude : FileGeneratorUtilities.RemoveLineTag))
                                     using (bffGenerator.Declare("fastBuildConsumeWinRTExtension", fastBuildConsumeWinRTExtension))
                                     using (bffGenerator.Declare("fastBuildOutputType", outputType))
@@ -1158,10 +1223,12 @@ namespace Sharpmake.Generators.FastBuild
                                             }
                                             else
                                             {
-                                                //  CLANG Specific
-
-                                                // TODO: This checks twice if the platform supports Clang -- fix?
-                                                clangPlatformBff?.SetupClangOptions(bffGenerator);
+                                                if (isCompileAsSwiftFile)
+                                                    applePlatformBff?.SetupSwiftOptions(bffGenerator);
+                                                else  if (!isNASMFileSection)
+                                                    clangPlatformBff?.SetupClangOptions(bffGenerator); // TODO: This checks twice if the platform supports Clang -- fix?
+                                                else
+                                                    bffGenerator.Write(fastBuildCompilerExtraOptions);
 
                                                 if (conf.Platform.IsUsingClang())
                                                 {
@@ -1170,10 +1237,9 @@ namespace Sharpmake.Generators.FastBuild
                                                     bffGenerator.Write(compilerOptionsClang);
                                                     if (conf.FastBuildDeoptimization != Project.Configuration.DeoptimizationWritableFiles.NoDeoptimization)
                                                     {
-                                                        bffGenerator.Write(Template.ConfigurationFile.ClangCompilerOptionsDeoptimize);
                                                         if (isUsePrecomp)
                                                             bffGenerator.Write(Template.ConfigurationFile.PCHOptionsDeoptimize);
-                                                        bffGenerator.Write(compilerOptionsClangDeoptimized);
+                                                        bffGenerator.Write(Template.ConfigurationFile.ClangCompilerOptionsDeoptimize);
                                                         bffGenerator.Write(Template.ConfigurationFile.DeOptimizeOption);
                                                     }
                                                 }
@@ -1207,10 +1273,12 @@ namespace Sharpmake.Generators.FastBuild
                                             }
                                             else
                                             {
-                                                // CLANG Specific
-
-                                                // TODO: This checks twice if the platform supports Clang -- fix?
-                                                clangPlatformBff?.SetupClangOptions(bffGenerator);
+                                                if (isCompileAsSwiftFile)
+                                                    applePlatformBff?.SetupSwiftOptions(bffGenerator);
+                                                else if (!isNASMFileSection)
+                                                    clangPlatformBff?.SetupClangOptions(bffGenerator);  // TODO: This checks twice if the platform supports Clang -- fix?
+                                                else
+                                                    bffGenerator.Write(fastBuildCompilerExtraOptions);
 
                                                 if (conf.Platform.IsUsingClang())
                                                 {
@@ -1222,7 +1290,7 @@ namespace Sharpmake.Generators.FastBuild
                                                     {
                                                         if (isUsePrecomp)
                                                             bffGenerator.Write(Template.ConfigurationFile.PCHOptionsDeoptimize);
-                                                        bffGenerator.Write(compilerOptionsClangDeoptimized);
+                                                        bffGenerator.Write(Template.ConfigurationFile.ClangCompilerOptionsDeoptimize);
                                                         bffGenerator.Write(Template.ConfigurationFile.DeOptimizeOption);
                                                     }
                                                 }
@@ -1305,21 +1373,24 @@ namespace Sharpmake.Generators.FastBuild
                                                 }
                                                 else
                                                 {
-                                                    // TODO: This checks twice if the platform supports Clang -- fix?
-                                                    clangPlatformBff?.SetupClangOptions(bffGenerator);
+                                                    if (isCompileAsSwiftFile)
+                                                        applePlatformBff?.SetupSwiftOptions(bffGenerator);
+                                                    else if (!isNASMFileSection)
+                                                        clangPlatformBff?.SetupClangOptions(bffGenerator);  // TODO: This checks twice if the platform supports Clang -- fix?
+                                                    else
+                                                        bffGenerator.Write(fastBuildCompilerExtraOptions);;
 
                                                     if (conf.Platform.IsUsingClang())
                                                     {
                                                         if (isUsePrecomp)
                                                             bffGenerator.Write(Template.ConfigurationFile.PCHOptionsClang);
 
-                                                        bffGenerator.Write(Template.ConfigurationFile.CompilerOptionsCommon);
-                                                        bffGenerator.Write(Template.ConfigurationFile.CompilerOptionsClang);
+                                                        bffGenerator.Write(compilerOptionsClang);
                                                         if (conf.FastBuildDeoptimization != Project.Configuration.DeoptimizationWritableFiles.NoDeoptimization)
                                                         {
                                                             if (isUsePrecomp)
                                                                 bffGenerator.Write(Template.ConfigurationFile.PCHOptionsDeoptimize);
-                                                            bffGenerator.Write(compilerOptionsClangDeoptimized);
+                                                            bffGenerator.Write(Template.ConfigurationFile.ClangCompilerOptionsDeoptimize);
                                                             bffGenerator.Write(Template.ConfigurationFile.DeOptimizeOption);
                                                         }
                                                         if (!useObjectLists)
@@ -1415,6 +1486,9 @@ namespace Sharpmake.Generators.FastBuild
                 ++configIndex;
             }
 
+            foreach (string masterlessBff in confBffHasMasters.Where(x => !x.Value).Select(x => x.Key))
+                Builder.Instance.LogWarningLine("Bff {0} doesn't appear in any master bff, it won't be buildable.", masterlessBff + FastBuildSettings.FastBuildConfigFileExtension);
+
             // Write all unity sections together at the beginning of the .bff just after the header.
             if (_unities.Any())
             {
@@ -1509,6 +1583,7 @@ namespace Sharpmake.Generators.FastBuild
             context.EnvironmentVariableResolver = platformDescriptor.GetPlatformEnvironmentResolver(resolverParams);
             projectOptionsGen.GenerateOptions(context);
             platformBff.SelectPreprocessorDefinitionsBff(context);
+            platformBff.SelectAdditionalCompilerOptionsBff(context);
 
             FillIncludeDirectoriesOptions(context);
 
@@ -1516,6 +1591,8 @@ namespace Sharpmake.Generators.FastBuild
 
             var dependenciesInfo = FillLibrariesOptions(context);
             dependenciesInfoPerConf.Add(context.Configuration, dependenciesInfo);
+
+            FillNasmOptions(context);
         }
 
         internal enum CompilerVersionForClangClType
@@ -1718,6 +1795,7 @@ namespace Sharpmake.Generators.FastBuild
             var resourceIncludePaths = new OrderableStrings(platformVcxproj.GetResourceIncludePaths(context));
             var assemblyIncludePaths = new OrderableStrings(platformVcxproj.GetAssemblyIncludePaths(context));
             context.CommandLineOptions["AdditionalIncludeDirectories"] = FileGeneratorUtilities.RemoveLineTag;
+            context.CommandLineOptions["SwiftAdditionalIncludeDirectories"] = FileGeneratorUtilities.RemoveLineTag;
             context.CommandLineOptions["AdditionalResourceIncludeDirectories"] = FileGeneratorUtilities.RemoveLineTag;
             context.CommandLineOptions["AdditionalUsingDirectories"] = FileGeneratorUtilities.RemoveLineTag;
             context.CommandLineOptions["AdditionalAssemblyIncludeDirectories"] = FileGeneratorUtilities.RemoveLineTag;
@@ -1728,14 +1806,24 @@ namespace Sharpmake.Generators.FastBuild
                 string defaultCmdLineIncludePrefix = platformDescriptor.IsUsingClang ? "-I " : "/I";
 
                 // Fill include dirs
+                var platformIncludePaths = platformVcxproj.GetPlatformIncludePathsWithPrefix(context);
+
                 var dirs = new List<string>();
                 dirs.AddRange(includePaths.Select(p => CmdLineConvertIncludePathsFunc(context, context.EnvironmentVariableResolver, p, defaultCmdLineIncludePrefix)));
-
-                var platformIncludePaths = platformVcxproj.GetPlatformIncludePathsWithPrefix(context);
-                var platformIncludePathsPrefixed = platformIncludePaths.Select(p => CmdLineConvertIncludePathsFunc(context, context.EnvironmentVariableResolver, p.Path, p.CmdLinePrefix)).ToList();
-                dirs.AddRange(platformIncludePathsPrefixed);
+                dirs.AddRange(platformIncludePaths.Select(p => CmdLineConvertIncludePathsFunc(context, context.EnvironmentVariableResolver, p.Path, p.CmdLinePrefix)));
                 if (dirs.Any())
                     context.CommandLineOptions["AdditionalIncludeDirectories"] = string.Join($"'{Environment.NewLine}            + ' ", dirs);
+
+                var applePlatformBff = PlatformRegistry.Query<IApplePlatformBff>(context.Configuration.Platform);
+                if (applePlatformBff != null && applePlatformBff.IsSwiftSupported())
+                {
+                    string swifttCmdLineIncludePrefix = "-Xcc " + defaultCmdLineIncludePrefix.Replace(" ", " -Xcc ");
+                    var swiftDirs = new List<string>();
+                    swiftDirs.AddRange(includePaths.Select(p => CmdLineConvertIncludePathsFunc(context, context.EnvironmentVariableResolver, p, swifttCmdLineIncludePrefix)));
+                    swiftDirs.AddRange(platformIncludePaths.Select(p => CmdLineConvertIncludePathsFunc(context, context.EnvironmentVariableResolver, p.Path, "-Xcc " + p.CmdLinePrefix.Replace(" ", " -Xcc "))));
+                    if (swiftDirs.Any())
+                        context.CommandLineOptions["SwiftAdditionalIncludeDirectories"] = string.Join($"'{Environment.NewLine}            + ' ", swiftDirs);
+                }
 
                 // Fill resource include dirs
                 var resourceDirs = new List<string>();
@@ -1752,7 +1840,6 @@ namespace Sharpmake.Generators.FastBuild
                 // Fill Assembly include dirs
                 var assemblyDirs = new List<string>();
                 assemblyDirs.AddRange(assemblyIncludePaths.Select(p => CmdLineConvertIncludePathsFunc(context, context.EnvironmentVariableResolver, p, defaultCmdLineIncludePrefix)));
-
                 if (assemblyDirs.Any())
                     context.CommandLineOptions["AdditionalAssemblyIncludeDirectories"] = string.Join($"'{Environment.NewLine}                                    + ' ", assemblyDirs);
 
@@ -1875,6 +1962,54 @@ namespace Sharpmake.Generators.FastBuild
             }
 
             return dependenciesInfo;
+        }
+
+        private static void FillNasmOptions(BffGenerationContext context)
+        {
+            // Compiler path for nasm
+            context.CommandLineOptions["PathExe"] = context.Project.NasmExePath;
+
+            // Pre included files for NASM syntax
+            var preIncludedFiles = new List<string>();
+            preIncludedFiles.AddRange(context.Project.NasmPreIncludedFiles.Select(p => "-P\"" + p + "\""));
+            string preIncludedFilesJoined = string.Join(' ', preIncludedFiles);
+            context.CommandLineOptions["PreIncludedFiles"] = preIncludedFilesJoined;
+
+            // Fill Assembly include dirs in nasm syntax
+            var nasmAssemblyDirs = new List<string>();
+            var platformVcxproj = PlatformRegistry.Query<IPlatformVcxproj>(context.Configuration.Platform);
+            var assemblyIncludePaths = new OrderableStrings(platformVcxproj.GetAssemblyIncludePaths(context));
+            nasmAssemblyDirs.AddRange(assemblyIncludePaths.Select(p => CmdLineConvertIncludePathsFunc(context, context.EnvironmentVariableResolver, p, "-I ")));
+
+            if (nasmAssemblyDirs.Any())
+            {
+                context.CommandLineOptions["AdditionalAssemblyNasmIncludeDirectories"] = string.Join($"'{Environment.NewLine}                                    + ' ", nasmAssemblyDirs);
+            }
+            else
+            {
+                context.CommandLineOptions["AdditionalAssemblyNasmIncludeDirectories"] = FileGeneratorUtilities.RemoveLineTag;
+            }
+
+            // Defines in NASM syntax
+            var defines = new Strings();
+            defines.AddRange(context.Options.ExplicitDefines);
+            defines.AddRange(context.Configuration.Defines);
+
+            if (defines.Count > 0)
+            {
+                var fastBuildNasmDefines = new List<string>();
+
+                foreach (string define in defines.SortedValues)
+                {
+                    if (!string.IsNullOrWhiteSpace(define))
+                        fastBuildNasmDefines.Add(string.Format(@"{0}{1}{2}{1}", "-D", Util.DoubleQuotes, define.Replace(Util.DoubleQuotes, Util.EscapedDoubleQuotes)));
+                }
+                context.CommandLineOptions["NasmPreprocessorDefinitions"] = string.Join($"'{Environment.NewLine}            + ' ", fastBuildNasmDefines);
+            }
+            else
+            {
+                context.CommandLineOptions["NasmPreprocessorDefinitions"] = FileGeneratorUtilities.RemoveLineTag;
+            }
         }
 
         private static void SelectAdditionalLibraryDirectoriesOption(BffGenerationContext context)
@@ -2018,7 +2153,7 @@ namespace Sharpmake.Generators.FastBuild
             return null;
         }
 
-        private void ConfigureUnities(IGenerationContext context, Dictionary<Project.Configuration, Dictionary<Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>>, List<Vcxproj.ProjectFile>>> confSourceFiles)
+        private void ConfigureUnities(IGenerationContext context, Dictionary<Project.Configuration, Dictionary<SubConfig, List<Vcxproj.ProjectFile>>> confSourceFiles)
         {
             var conf = context.Configuration;
             // Only add unity build to non blobbed projects -> which they will be blobbed by FBuild
@@ -2029,8 +2164,8 @@ namespace Sharpmake.Generators.FastBuild
                 return;
 
             var confSubConfigs = confSourceFiles[conf];
-            var unityTuple = GetDefaultTupleConfig();
-            var sourceFiles = confSubConfigs[unityTuple];
+            var unitySubConfig = s_DefaultSubConfig;
+            var sourceFiles = confSubConfigs[unitySubConfig];
             var project = context.Project;
 
             const int spaceLength = 42;
@@ -2132,9 +2267,9 @@ namespace Sharpmake.Generators.FastBuild
             if (fastBuildUnityInputFiles == FileGeneratorUtilities.RemoveLineTag &&
                 fastBuildUnityPaths == FileGeneratorUtilities.RemoveLineTag)
             {
-                // completely drop the subconfig in case it was only a unity tuple, without any files
+                // completely drop the subconfig in case it was only a unity subConfig, without any files
                 if (sourceFiles.Count == 0)
-                    confSubConfigs.Remove(unityTuple);
+                    confSubConfigs.Remove(unitySubConfig);
 
                 // no input path nor files => no unity
                 return;
@@ -2193,25 +2328,7 @@ namespace Sharpmake.Generators.FastBuild
         }
 
         // For now, this will do.
-        private static Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>> GetDefaultTupleConfig()
-        {
-            bool isConsumeWinRTExtensions = false;
-            bool isCompileAsCLRFile = false;
-            bool isCompileAsNonCLRFile = false;
-            bool isASMFile = false;
-            bool isCompileAsCPPFile = false;
-            bool isCompileAsCFile = false;
-            bool isCompileAsObjCFile = false;
-            bool isCompileAsObjCPPFile = false;
-            bool usePrecomp = true;
-            Options.Vc.Compiler.Exceptions exceptionSetting = Options.Vc.Compiler.Exceptions.Disable;
-            var tuple = new Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>>
-                 (usePrecomp, isCompileAsCFile, isCompileAsCPPFile, isCompileAsCLRFile, isConsumeWinRTExtensions, isASMFile, exceptionSetting,
-                 new Tuple<bool, bool, bool>(isCompileAsNonCLRFile, isCompileAsObjCFile, isCompileAsObjCPPFile));
-
-            return tuple;
-        }
-
+        private static SubConfig s_DefaultSubConfig = new SubConfig();
 
         private static string FormatListPartForTag(List<string> items, int spaceLength, bool addSeparatorAfterList)
         {
@@ -2240,14 +2357,14 @@ namespace Sharpmake.Generators.FastBuild
             writer.Flush();
         }
 
-        private static Dictionary<Project.Configuration, Dictionary<Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>>, List<Vcxproj.ProjectFile>>>
+        private static Dictionary<Project.Configuration, Dictionary<SubConfig, List<Vcxproj.ProjectFile>>>
         GetGeneratedFiles(
             IGenerationContext context,
             List<Project.Configuration> configurations,
             out List<Vcxproj.ProjectFile> filesInNonDefaultSections
         )
         {
-            var confSubConfigs = new Dictionary<Project.Configuration, Dictionary<Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>>, List<Vcxproj.ProjectFile>>>();
+            var confSubConfigs = new Dictionary<Project.Configuration, Dictionary<SubConfig, List<Vcxproj.ProjectFile>>>();
             filesInNonDefaultSections = new List<Vcxproj.ProjectFile>();
 
             // Add source files
@@ -2289,7 +2406,11 @@ namespace Sharpmake.Generators.FastBuild
                                                         conf.ResolvedSourceFilesWithCompileAsWinRTOption.Contains(file.FileName)) &&
                                                         !(conf.ExcludeWinRTExtensions.Contains(file.FileName) ||
                                                         conf.ResolvedSourceFilesWithExcludeAsWinRTOption.Contains(file.FileName));
+                        // TODOANT: Also trigger on .nasm files
                         bool isASMFile = string.Compare(file.FileExtension, ".asm", StringComparison.OrdinalIgnoreCase) == 0;
+                        bool isSwiftFile = string.Compare(file.FileExtension, ".swift", StringComparison.OrdinalIgnoreCase) == 0 &&
+                                           (PlatformRegistry.Query<IApplePlatformBff>(conf.Platform)?.IsSwiftSupported() ?? false);
+                        bool isNASMFile = string.Compare(file.FileExtension, ".nasm", StringComparison.OrdinalIgnoreCase) == 0;
 
                         Options.Vc.Compiler.Exceptions exceptionSetting = conf.GetExceptionSettingForFile(file.FileName);
 
@@ -2300,38 +2421,57 @@ namespace Sharpmake.Generators.FastBuild
                             isDontUsePrecomp = true;
                             isCompileAsCFile = true;
                         }
-                        else if (isCompileAsObjCFile || isCompileAsObjCPPFile)
+                        else if (isCompileAsObjCFile || isCompileAsObjCPPFile || isSwiftFile)
                         {
                             isDontUsePrecomp = true;
                         }
+                        Languages languageKind = Languages.None;
+                        if (isCompileAsCFile)
+                            languageKind |= Languages.C;
+                        if (isCompileAsCPPFile)
+                            languageKind |= Languages.CPP;
+                        if (isCompileAsObjCFile)
+                            languageKind |= Languages.ObjC;
+                        if (isCompileAsObjCPPFile)
+                            languageKind |= Languages.ObjCPP;
+                        if (isSwiftFile)
+                            languageKind |= Languages.Swift;
+                        if (isASMFile)
+                            languageKind |= Languages.Asm;
+                        if (isNASMFile)
+                            languageKind |= Languages.Nasm;
 
-                        var tuple = new Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>> (
-                            !isDontUsePrecomp,
-                            isCompileAsCFile,
-                            isCompileAsCPPFile,
-                            isCompileAsCLRFile,
-                            isConsumeWinRTExtensions,
-                            isASMFile,
-                            exceptionSetting,
-                            new Tuple<bool, bool, bool>(isCompileAsNonCLRFile, isCompileAsObjCFile, isCompileAsObjCPPFile));
+                        LanguageFeatures languageFeatures = LanguageFeatures.None;
+                        if (isCompileAsCLRFile)
+                            languageFeatures |= LanguageFeatures.CLR;
+                        if (isCompileAsNonCLRFile)
+                            languageFeatures |= LanguageFeatures.NonCLR;
+                        if (isConsumeWinRTExtensions)
+                            languageFeatures |= LanguageFeatures.ConsumeWinRTExtensions;
 
+                        var subConfig = new SubConfig()
+                        {
+                            IsUsePrecomp = !isDontUsePrecomp,
+                            Languages = languageKind,
+                            LanguageFeatures = languageFeatures,
+                            Exceptions = exceptionSetting
+                        };
 
-                        Dictionary<Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>>, List<Vcxproj.ProjectFile>> subConfigs = null;
+                        Dictionary<SubConfig, List<Vcxproj.ProjectFile>> subConfigs = null;
                         if (!confSubConfigs.TryGetValue(conf, out subConfigs))
                         {
-                            subConfigs = new Dictionary<Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>>, List<Vcxproj.ProjectFile>>();
+                            subConfigs = new Dictionary<SubConfig, List<Vcxproj.ProjectFile>>();
                             confSubConfigs.Add(conf, subConfigs);
                         }
                         List<Vcxproj.ProjectFile> subConfigFiles = null;
-                        if (!subConfigs.TryGetValue(tuple, out subConfigFiles))
+                        if (!subConfigs.TryGetValue(subConfig, out subConfigFiles))
                         {
                             subConfigFiles = new List<Vcxproj.ProjectFile>();
-                            subConfigs.Add(tuple, subConfigFiles);
+                            subConfigs.Add(subConfig, subConfigFiles);
                         }
                         subConfigFiles.Add(file);
 
-                        var defaultTuple = GetDefaultTupleConfig();
-                        if (!tuple.Equals(defaultTuple))
+                        if (!subConfig.Equals(s_DefaultSubConfig))
                         {
                             filesInNonDefaultSections.Add(file);
                         }
@@ -2345,19 +2485,19 @@ namespace Sharpmake.Generators.FastBuild
                 if (conf.FastBuildBlobbed && (sourceFiles.Count > 0 || conf.Project.IsFastBuildAll))
                 {
                     // For now, this will do.
-                    var tuple = GetDefaultTupleConfig();
+                    var subConfig = s_DefaultSubConfig;
 
-                    Dictionary<Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>>, List<Vcxproj.ProjectFile>> subConfigs = null;
+                    Dictionary<SubConfig, List<Vcxproj.ProjectFile>> subConfigs = null;
                     if (!confSubConfigs.TryGetValue(conf, out subConfigs))
                     {
-                        subConfigs = new Dictionary<Tuple<bool, bool, bool, bool, bool, bool, Options.Vc.Compiler.Exceptions, Tuple<bool, bool, bool>>, List<Vcxproj.ProjectFile>>();
+                        subConfigs = new Dictionary<SubConfig, List<Vcxproj.ProjectFile>>();
                         confSubConfigs.Add(conf, subConfigs);
                     }
                     List<Vcxproj.ProjectFile> subConfigFiles = null;
-                    if (!subConfigs.TryGetValue(tuple, out subConfigFiles))
+                    if (!subConfigs.TryGetValue(subConfig, out subConfigFiles))
                     {
                         subConfigFiles = new List<Vcxproj.ProjectFile>();
-                        subConfigs.Add(tuple, subConfigFiles);
+                        subConfigs.Add(subConfig, subConfigFiles);
                     }
                 }
             }

@@ -37,6 +37,7 @@ namespace Sharpmake
     .CompilerExtraOptions   = ''
             // General options
             // -------------------------
+            + ' [cmdLineOptions.GenerateDebuggingSymbols]'
             + ' [cmdLineOptions.AdditionalIncludeDirectories]'
             + ' [cmdLineOptions.AdditionalUsingDirectories]'
             + ' [cmdLineOptions.PreprocessorDefinitions]'
@@ -52,6 +53,8 @@ namespace Sharpmake
             + ' [cmdLineOptions.CppExceptions]'
             + ' [cmdLineOptions.ObjCExceptions]'
             + ' [cmdLineOptions.ObjCARCExceptions]'
+            + ' [cmdLineOptions.DisableExceptions]'
+            + ' [cmdLineOptions.PrivateInlines]'
 ";
 
         private const string _compilerExtraOptionsAdditional = @"
@@ -70,8 +73,38 @@ namespace Sharpmake
     // ---------------------
     .CompilerOptimizations = ''
             + ' [cmdLineOptions.OptimizationLevel]'
-            + ' [cmdLineOptions.GenerateDebuggingSymbols]'
             + ' [options.AdditionalCompilerOptimizeOptions]'
+";
+
+        private const string _swiftCompilerExtraOptionsGeneral = @"
+    .CompilerExtraOptions   = ''
+            // General options
+            // -------------------------
+            + ' -parse-as-library'
+            + ' -module-name [cmdLineOptions.SwiftModuleName]'
+            + ' [cmdLineOptions.SwiftLanguageVersion]'
+            + ' [cmdLineOptions.SwiftAdditionalIncludeDirectories]'
+            + ' [cmdLineOptions.SwiftDeploymentTarget]'
+            + ' -Xcc [cmdLineOptions.RuntimeTypeInfo]'
+            + ' -Xcc [cmdLineOptions.CppExceptions]'
+            + ' -Xcc [cmdLineOptions.ObjCExceptions]'
+            + ' -Xcc [cmdLineOptions.ObjCARCExceptions]'
+            + ' -Xcc [cmdLineOptions.DisableExceptions]'
+";
+
+        private const string _swiftCompilerExtraOptionsAdditional = @"
+            // Additional compiler options
+            //--------------------------
+            + ' [cmdLineOptions.SwiftAdditionalCompilerOptions]'
+";
+
+        private const string _swiftCompilerOptimizationOptions =
+                @"
+    // Optimizations options
+    // ---------------------
+    .CompilerOptimizations = ''
+            + ' [cmdLineOptions.SwiftOptimizationLevel]'
+            + ' [cmdLineOptions.GenerateDebuggingSymbols]'
 ";
     }
 }

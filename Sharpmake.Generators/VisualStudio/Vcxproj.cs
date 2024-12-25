@@ -117,7 +117,7 @@ namespace Sharpmake.Generators.VisualStudio
 
                 PresentPlatforms = ProjectConfigurations.Select(conf => conf.Platform).Distinct().ToDictionary(p => p, p => PlatformRegistry.Get<IPlatformVcxproj>(p));
 
-                FastBuildMakeCommandGenerator = FastBuildSettings.MakeCommandGenerator ?? new Bff.FastBuildDefaultNMakeCommandGenerator();
+                FastBuildMakeCommandGenerator = FastBuildSettings.MakeCommandGenerator;
             }
 
             public void Reset()
@@ -485,7 +485,21 @@ namespace Sharpmake.Generators.VisualStudio
             // .props files
             fileGenerator.Write(Template.Project.ProjectAfterConfigurationsGeneral);
             if (context.Project.ContainsASM)
+            {
                 fileGenerator.Write(Template.Project.ProjectImportedMasmProps);
+            }
+
+            if (context.Project.ContainsNASM)
+            {
+                if (context.Project.NasmExePath.Length == 0)
+                {
+                    throw new ArgumentNullException("NasmExePath not set and needed for NASM assembly files.");
+                }
+                using (fileGenerator.Declare("importedNasmPropsFile", context.Project.NasmPropsFile))
+                {
+                    fileGenerator.Write(Template.Project.ProjectImportedNasmProps);
+                }
+            }
 
             VsProjCommon.WriteProjectCustomPropsFiles(context.Project.CustomPropsFiles, context.ProjectDirectoryCapitalized, fileGenerator);
             VsProjCommon.WriteConfigurationsCustomPropsFiles(context.ProjectConfigurations, context.ProjectDirectoryCapitalized, fileGenerator);
@@ -520,10 +534,11 @@ namespace Sharpmake.Generators.VisualStudio
 
                             commandLine += " -config $(SolutionName)" + FastBuildSettings.FastBuildConfigFileExtension;
 
+                            string makeExecutable = context.FastBuildMakeCommandGenerator.GetExecutablePath(conf);
                             using (fileGenerator.Declare("relativeMasterBffPath", "$(SolutionDir)"))
-                            using (fileGenerator.Declare("fastBuildMakeCommandBuild", context.FastBuildMakeCommandGenerator.GetCommand(FastBuildMakeCommandGenerator.BuildType.Build, conf, commandLine)))
-                            using (fileGenerator.Declare("fastBuildMakeCommandRebuild", context.FastBuildMakeCommandGenerator.GetCommand(FastBuildMakeCommandGenerator.BuildType.Rebuild, conf, commandLine)))
-                            using (fileGenerator.Declare("fastBuildMakeCommandCompileFile", context.FastBuildMakeCommandGenerator.GetCommand(FastBuildMakeCommandGenerator.BuildType.CompileFile, conf, commandLine)))
+                            using (fileGenerator.Declare("fastBuildMakeCommandBuild", $"{makeExecutable} {context.FastBuildMakeCommandGenerator.GetArguments(FastBuildMakeCommandGenerator.BuildType.Build, conf, commandLine)}"))
+                            using (fileGenerator.Declare("fastBuildMakeCommandRebuild", $"{makeExecutable} {context.FastBuildMakeCommandGenerator.GetArguments(FastBuildMakeCommandGenerator.BuildType.Rebuild, conf, commandLine)}"))
+                            using (fileGenerator.Declare("fastBuildMakeCommandCompileFile", $"{makeExecutable} {context.FastBuildMakeCommandGenerator.GetArguments(FastBuildMakeCommandGenerator.BuildType.CompileFile, conf, commandLine)}"))
                             {
                                 platformVcxproj.GenerateProjectConfigurationFastBuildMakeFile(context, fileGenerator);
                             }
@@ -578,7 +593,13 @@ namespace Sharpmake.Generators.VisualStudio
                             platformVcxproj.GenerateProjectLinkVcxproj(context, fileGenerator);
 
                             if (conf.Project.ContainsASM)
+                            {
                                 platformVcxproj.GenerateProjectMasmVcxproj(context, fileGenerator);
+                            }
+                            if (conf.Project.ContainsNASM)
+                            {
+                                platformVcxproj.GenerateProjectNasmVcxproj(context, fileGenerator);
+                            }
 
                             if (conf.EventPreBuild.Count != 0)
                                 fileGenerator.Write(Template.Project.ProjectConfigurationsPreBuildEvent);
@@ -650,6 +671,18 @@ namespace Sharpmake.Generators.VisualStudio
             {
                 fileGenerator.Write(Template.Project.ProjectMasmTargetsItem);
             }
+            if (context.Project.ContainsNASM)
+            {
+                if (context.Project.NasmExePath.Length == 0)
+                {
+                    throw new ArgumentNullException("NasmExePath not set and needed for NASM assembly files.");
+                }
+                using (fileGenerator.Declare("importedNasmTargetsFile", context.Project.NasmTargetsFile))
+                {
+                    fileGenerator.Write(Template.Project.ProjectNasmTargetsItem);
+                }
+            }
+
             foreach (string targetsFiles in context.Project.CustomTargetsFiles)
             {
                 string capitalizedFile = Project.GetCapitalizedFile(targetsFiles) ?? targetsFiles;

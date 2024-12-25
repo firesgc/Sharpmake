@@ -356,7 +356,7 @@ namespace Sharpmake
                 string vsDir = visualVersion.GetVisualStudioDir();
                 if (visualVersion > DevEnv.vs2015)
                 {
-                    return Path.Combine(vsDir, @"VC\Tools\MSVC", visualVersion.GetVisualStudioVCToolsVersion().ToString());
+                    return Path.Combine(vsDir, "VC", "Tools", "MSVC", visualVersion.GetVisualStudioVCToolsVersion().ToString());
                 }
                 else
                 {
@@ -393,11 +393,18 @@ namespace Sharpmake
             return version;
         }
 
+        private static ConcurrentDictionary<(DevEnv, Platform), Version> s_visualStudioCompilerVersionCache = new ConcurrentDictionary<(DevEnv, Platform), Version>();
+
         public static Version GetVisualStudioVCToolsCompilerVersion(this DevEnv visualVersion, Platform platform)
         {
-            string clExeFile = Path.Combine(visualVersion.GetVisualStudioBinPath(platform), "cl.exe");
-            FileVersionInfo fileVersionInfo = FileVersionInfo.GetVersionInfo(clExeFile);
-            return new Version(fileVersionInfo.FileMajorPart, fileVersionInfo.FileMinorPart, fileVersionInfo.FileBuildPart, fileVersionInfo.FilePrivatePart);
+            var cacheKey = (visualVersion, platform);
+            Version version = s_visualStudioCompilerVersionCache.GetOrAdd(cacheKey, ((DevEnv, Platform) key) =>
+            {
+                string clExeFile = Path.Combine(visualVersion.GetVisualStudioBinPath(platform), "cl.exe");
+                FileVersionInfo fileVersionInfo = FileVersionInfo.GetVersionInfo(clExeFile);
+                return new Version(fileVersionInfo.FileMajorPart, fileVersionInfo.FileMinorPart, fileVersionInfo.FileBuildPart, fileVersionInfo.FilePrivatePart);
+            });
+            return version;
         }
 
         /// <summary>
@@ -745,6 +752,8 @@ namespace Sharpmake
                     return "10.0.22000.0";
                 case Options.Vc.General.WindowsTargetPlatformVersion.v10_0_22621_0:
                     return "10.0.22621.0";
+                case Options.Vc.General.WindowsTargetPlatformVersion.v10_0_26100_0:
+                    return "10.0.26100.0";
                 case Options.Vc.General.WindowsTargetPlatformVersion.Latest:
                     return "$(LatestTargetPlatformVersion)";
                 default:

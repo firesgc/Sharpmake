@@ -604,7 +604,7 @@ namespace Sharpmake
         internal static string ResolvePathAndFixCase(string root, string path)
         {
             string resolvedPath = ResolvePath(root, path);
-            return GetProperFilePathCapitalization(resolvedPath);
+            return GetCapitalizedPath(resolvedPath);
         }
 
 
@@ -645,13 +645,26 @@ namespace Sharpmake
             string properFileName = fileInfo.Name;
             if (dirInfo != null && dirInfo.Exists)
             {
-                foreach (var fsInfo in dirInfo.EnumerateFileSystemInfos())
+                // This search could fail on case sensitive filesystem. We will revert to a slower method if not found
+                bool foundFilename = false;
+                foreach (var fsInfo in dirInfo.EnumerateFiles(fileInfo.Name))
                 {
-                    if (((fsInfo.Attributes & FileAttributes.Directory) != FileAttributes.Directory)
-                        && string.Compare(fsInfo.Name, fileInfo.Name, StringComparison.OrdinalIgnoreCase) == 0)
+                    properFileName = fsInfo.Name;
+                    foundFilename = true;
+                    break;
+                }
+
+                if (!foundFilename) 
+                {
+                    // Slow search - Normally shouldn't happen
+                    foreach (var fsInfo in dirInfo.EnumerateFileSystemInfos())
                     {
-                        properFileName = fsInfo.Name;
-                        break;
+                        if (((fsInfo.Attributes & FileAttributes.Directory) != FileAttributes.Directory)
+                            && string.Compare(fsInfo.Name, fileInfo.Name, StringComparison.OrdinalIgnoreCase) == 0)
+                        {
+                            properFileName = fsInfo.Name;
+                            break;
+                        }
                     }
                 }
             }
@@ -754,6 +767,12 @@ namespace Sharpmake
             }
             s_capitalizedPaths.TryAdd(pathLC, capitalizedPath);
             return capitalizedPath;
+        }
+
+        internal static void RegisterCapitalizedPath(string physicalPath)
+        {
+            string pathLC = physicalPath.ToLower();
+            s_capitalizedPaths.TryAdd(pathLC, physicalPath);
         }
 
         /// <summary>

@@ -180,7 +180,18 @@ namespace Sharpmake
                     Disable,
                     SWIFT4_0,
                     SWIFT4_2,
-                    SWIFT5_0
+                    SWIFT5_0,
+                    SWIFT6_0
+                }
+
+                public class SwiftModuleName : StringOption
+                {
+                    public SwiftModuleName(string value) : base(value) { }
+                    public static readonly string Default = "[project.LowerName]";
+                }
+
+                public class SwiftAdditionalCompilerOptions : OrderableStrings
+                {
                 }
 
                 public enum DeadStrip
@@ -264,6 +275,12 @@ namespace Sharpmake
                     Enable
                 }
 
+                public enum AsyncExceptions
+                {
+                    [Default]
+                    Disable,
+                    Enable
+                }
                 public class ExternalResourceFolders : Strings
                 {
                     public ExternalResourceFolders(params string[] paths)
@@ -450,6 +467,7 @@ namespace Sharpmake
                     Enable
                 }
 
+                [Obsolete("Deprecated and Ignored. Use `ApplePlatform.Settings.MacOSSDKPath` instead.", error: true)]
                 public class SDKRoot
                 {
                     public string Value;
@@ -1009,29 +1027,17 @@ namespace Sharpmake
                        : base(value) { }
                 }
 
-                public class UISupportedInterfaceOrientations : UniqueList<UIInterfaceOrientation>
+                public class UISupportedInterfaceOrientations
                 {
+                    private UIInterfaceOrientation[] _uIInterfaceOrientations;
                     public UISupportedInterfaceOrientations(params UIInterfaceOrientation[] values)
-                        : base(EqualityComparer<UIInterfaceOrientation>.Default, values) { }
+                    {
+                        _uIInterfaceOrientations = values;
+                    }
 
                     public override string ToString()
                     {
-                        StringBuilder builder = new StringBuilder(Count * 128);
-                        bool first = true;
-                        foreach (UIInterfaceOrientation value in _hash)
-                        {
-                            if (!first)
-                                builder.Append(' ');
-                            else
-                                first = false;
-
-                            builder.Append(value.ToString());
-                        }
-
-                        if (_hash.Count > 1)
-                            return @$"""{builder.ToString()}""";
-
-                        return builder.ToString();
+                        return "\"" + string.Join(" ", _uIInterfaceOrientations) + "\"";
                     }
                 }
 
@@ -1188,6 +1194,21 @@ namespace Sharpmake
                 {
                     public DebugArguments(List<string> args)
                         : base(args) 
+                    {
+                    }
+                }
+
+                public class EnvironmentVariables
+                {
+                    public Dictionary<string, string> Variables { get; set; } = new Dictionary<string, string>();
+                }
+
+                /// <summary>
+                /// This option can be used to set a custom runnable path in the scheme file for fastbuild targets
+                /// </summary>
+                public class CustomRunnablePath : PathOption
+                {
+                    public CustomRunnablePath(string path) : base(path)
                     {
                     }
                 }
