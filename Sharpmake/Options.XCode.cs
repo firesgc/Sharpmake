@@ -846,6 +846,13 @@ namespace Sharpmake
                     [Default]
                     Enable
                 }
+
+                public enum UseHeaderMap
+                {
+                    [Default]
+                    Disable,
+                    Enable
+                }
             }
 
             /// <summary>
@@ -1251,6 +1258,26 @@ namespace Sharpmake
                 public class CustomRunnablePath : PathOption
                 {
                     public CustomRunnablePath(string path) : base(path)
+                    {
+                    }
+                }
+
+                /// <summary>
+                /// This option can be used to set a custom working directory
+                /// </summary>
+                public class CustomWorkingDirectory : PathOption
+                {
+                    public CustomWorkingDirectory(string path) : base(path)
+                    {
+                    }
+                }
+
+                /// <summary>
+                /// This option can be used to set a custom working directory
+                /// </summary>
+                public class CustomLLDBInitFile : PathOption
+                {
+                    public CustomLLDBInitFile(string path) : base(path)
                     {
                     }
                 }
