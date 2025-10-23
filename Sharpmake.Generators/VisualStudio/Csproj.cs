@@ -1486,7 +1486,7 @@ namespace Sharpmake.Generators.VisualStudio
                             // FIXME : MsBuild does not seem to properly detect ReferenceOutputAssembly setting. 
                             // It may try to recompile the project if the output file of the dependency is missing. 
                             // To counter this, the CopyLocal field is forced to false for build-only dependencies. 
-                            bool isPrivate = project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ProjectReferences) && dependency.ReferenceOutputAssembly != false;
+                            bool isPrivate = dependency.CopyLocal && project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ProjectReferences) && dependency.ReferenceOutputAssembly != false;
 
                             string includeOutputGroupsInVsix = null;
                             if (isPrivate && project.ProjectTypeGuids == CSharpProjectType.Vsix)
@@ -1547,7 +1547,7 @@ namespace Sharpmake.Generators.VisualStudio
                             Include = $"{dependency.Configuration.AssemblyName}{(isMultiFramework ? "-" + GetTargetFrameworksString(targetFramework) : "")}",
                             SpecificVersion = false,
                             HintPath = Util.PathGetRelative(_projectPathCapitalized, dllPath),
-                            Private = project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ExternalReferences),
+                            Private = dependency.CopyLocal && project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ExternalReferences),
                         };
                         itemGroups.AddReference(targetFramework, referencesByPath);
                     }
@@ -3582,6 +3582,16 @@ namespace Sharpmake.Generators.VisualStudio
             Options.Option(Options.CSharp.FileAlignment.Value2048, () => { options["FileAlignment"] = "2048"; }),
             Options.Option(Options.CSharp.FileAlignment.Value4096, () => { options["FileAlignment"] = "4096"; }),
             Options.Option(Options.CSharp.FileAlignment.Value8192, () => { options["FileAlignment"] = "8192"; })
+            );
+
+            SelectOption
+            (
+            Options.Option(Options.CSharp.RollForward.Minor, () => { options["RollForward"] = RemoveLineTag; }),
+            Options.Option(Options.CSharp.RollForward.Major, () => { options["RollForward"] = "Major"; }),
+            Options.Option(Options.CSharp.RollForward.LatestPatch, () => { options["RollForward"] = "LatestPatch"; }),
+            Options.Option(Options.CSharp.RollForward.LatestMinor, () => { options["RollForward"] = "LatestMinor"; }),
+            Options.Option(Options.CSharp.RollForward.LatestMajor, () => { options["RollForward"] = "LatestMajor"; }),
+            Options.Option(Options.CSharp.RollForward.Disable, () => { options["RollForward"] = "Disable"; })
             );
 
             SelectOption

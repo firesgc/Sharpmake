@@ -539,7 +539,7 @@ namespace Sharpmake.Generators.VisualStudio
                             commandLine += " -config $(SolutionName)" + FastBuildSettings.FastBuildConfigFileExtension;
 
                             string makeExecutable = context.FastBuildMakeCommandGenerator.GetExecutablePath(conf);
-                            using (fileGenerator.Declare("relativeMasterBffPath", "$(SolutionDir)"))
+                            using (fileGenerator.Declare("fastBuildWorkingDirectory", context.FastBuildMakeCommandGenerator.GetWorkingDirectory(conf)))
                             using (fileGenerator.Declare("fastBuildMakeCommandBuild", $"{makeExecutable} {context.FastBuildMakeCommandGenerator.GetArguments(FastBuildMakeCommandGenerator.BuildType.Build, conf, commandLine)}"))
                             using (fileGenerator.Declare("fastBuildMakeCommandRebuild", $"{makeExecutable} {context.FastBuildMakeCommandGenerator.GetArguments(FastBuildMakeCommandGenerator.BuildType.Rebuild, conf, commandLine)}"))
                             using (fileGenerator.Declare("fastBuildMakeCommandCompileFile", $"{makeExecutable} {context.FastBuildMakeCommandGenerator.GetArguments(FastBuildMakeCommandGenerator.BuildType.CompileFile, conf, commandLine)}"))
@@ -771,6 +771,9 @@ namespace Sharpmake.Generators.VisualStudio
             var platformIncludePaths = platformVcxproj.GetPlatformIncludePaths(context);
             context.Options["AdditionalPlatformIncludeDirectories"] = platformIncludePaths.Any() ? Util.PathGetRelative(context.ProjectDirectory, platformIncludePaths).JoinStrings(";") : FileGeneratorUtilities.RemoveLineTag;
 
+            var nmakeIncludeSearchPath = includePaths.Concat(platformIncludePaths);
+            context.Options["NMakeIncludeSearchPath"] = nmakeIncludeSearchPath.Any() ? Util.PathGetRelative(context.ProjectDirectory, nmakeIncludeSearchPath).JoinStrings(";") : FileGeneratorUtilities.RemoveLineTag;
+
             // Fill resource include dirs
             var resourceIncludePaths = platformVcxproj.GetResourceIncludePaths(context);
             context.Options["AdditionalResourceIncludeDirectories"] = resourceIncludePaths.Any() ? Util.PathGetRelative(context.ProjectDirectory, resourceIncludePaths).JoinStrings(";") : FileGeneratorUtilities.RemoveLineTag;
@@ -957,20 +960,27 @@ namespace Sharpmake.Generators.VisualStudio
 
             if (!fastbuildOnly)
             {
-                string externalReferencesCopyLocal = (firstConf.Project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ExternalReferences)
-                                           ? "true"
-                                           : FileGeneratorUtilities.RemoveLineTag);
-
-                foreach (var reference in firstConf.ReferencesByPath)
+                foreach( var conf in context.ProjectConfigurations)
                 {
-                    string nameWithExtension = reference.Split(Util.WindowsSeparator).Last();
-                    string name = nameWithExtension.Substring(0, nameWithExtension.LastIndexOf('.'));
-
-                    using (projectFilesWriter.Declare("include", name))
-                    using (projectFilesWriter.Declare("hintPath", reference))
-                    using (projectFilesWriter.Declare("private", externalReferencesCopyLocal))
+                    string externalReferencesCopyLocal = conf.Project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ExternalReferences)
+                        ? "true"
+                        : FileGeneratorUtilities.RemoveLineTag;
+                    
+                    using (projectFilesWriter.Declare("platformName", Util.GetToolchainPlatformString(conf.Platform, conf.Project, conf.Target)))
+                    using (projectFilesWriter.Declare("conf", conf))
                     {
-                        projectFilesWriter.Write(Template.Project.ReferenceByPath);
+                        foreach (var reference in conf.ReferencesByPath)
+                        {
+                            string nameWithExtension = reference.Split(Util.WindowsSeparator).Last();
+                            string name = nameWithExtension.Substring(0, nameWithExtension.LastIndexOf('.'));
+                        
+                            using (projectFilesWriter.Declare("include", name))
+                            using (projectFilesWriter.Declare("hintPath", reference))
+                            using (projectFilesWriter.Declare("private", externalReferencesCopyLocal))
+                            {
+                                projectFilesWriter.Write(Template.Project.ReferenceByPath);
+                            }
+                        }
                     }
                 }
             }
@@ -978,7 +988,7 @@ namespace Sharpmake.Generators.VisualStudio
             // Write dotNet dependencies references
             {
                 // The behavior should be the same than for csproj...
-                string projectDependenciesCopyLocal = firstConf.Project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ProjectReferences).ToString().ToLower();
+                bool isDependenciesProjectReferences = firstConf.Project.DependenciesCopyLocal.HasFlag(Project.DependenciesCopyLocalTypes.ProjectReferences);
 
                 Options.ExplicitOptions options = new Options.ExplicitOptions();
                 options["CopyLocalSatelliteAssemblies"] = FileGeneratorUtilities.RemoveLineTag;
@@ -1030,7 +1040,7 @@ namespace Sharpmake.Generators.VisualStudio
                         using (projectFilesWriter.Declare("include", include))
                         using (projectFilesWriter.Declare("projectGUID", dependency.ProjectGuid ?? FileGeneratorUtilities.RemoveLineTag))
                         using (projectFilesWriter.Declare("projectRefName", dependency.ProjectName))
-                        using (projectFilesWriter.Declare("private", projectDependenciesCopyLocal))
+                        using (projectFilesWriter.Declare("private", (dotNetDependency.CopyLocal && isDependenciesProjectReferences).ToString().ToLower()))
                         using (projectFilesWriter.Declare("options", options))
                         {
                             projectFilesWriter.Write(Template.Project.ProjectReference);

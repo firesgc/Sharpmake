@@ -1,18 +1,12 @@
+# Pipelines runs only on branches and tags.
+# Disable merge request pipelines, pipelines for merge results and merge trains.
 include:
+  - template: 'Workflows/Branch-Pipelines.gitlab-ci.yml'
   - project: 'Sharpmake/SharpmakeExtended'
     file: 'build/sharpmake-ci.yml'
-
-workflow:
-  rules:
-    # Enable merge request pipelines.
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    # Avoid duplicate pipelines when pushing in a branch.
-    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
-      when: never
-    # Else run pipelines for branches and tags.
-    - if: $CI_COMMIT_BRANCH
-    - if: $CI_COMMIT_TAG
-
+  - project: 'Square/Runners/ci/templates/square-runners-mac-ci-template'
+    file: 'square_mac_runner.yml'
+    ref: '6.0.0'
 stages:
   - build
   - test
@@ -46,8 +40,11 @@ compilation:windows:
   extends: .compilation:base
 
 compilation:mac:
-  extends: .compilation:base
-  tags: [square_mac]
+  extends: 
+    - .compilation:base
+    - .square_mac_arm_macos15
+  
+  tags: [square_mac_arm]
 
 compilation:linux:
   extends: .compilation:base

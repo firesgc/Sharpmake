@@ -819,14 +819,12 @@ namespace Sharpmake
                             SetResolving(memberPath);
                             OrderableStrings values = fieldValue as OrderableStrings;
 
-                            OrderableStrings copyOfList = new OrderableStrings(values);
-                            values.Clear();
-
-                            for (int i = 0; i < copyOfList.Count; ++i)
+                            for (int i = 0; i < values.Count; ++i)
                             {
                                 bool wasChanged;
-                                string value = Resolve(copyOfList[i], fallbackValue, out wasChanged);
-                                values.Add(value, copyOfList.GetOrderNumber(i));
+                                string value = Resolve(values[i], fallbackValue, out wasChanged);
+                                if (wasChanged)
+                                    i = values.SetOrRemoveAtIndex(i, value);
                             }
 
                             SetResolved(memberPath);
@@ -839,14 +837,12 @@ namespace Sharpmake
                             SetResolving(memberPath);
                             IList<string> values = fieldValue as IList<string>;
 
-                            string[] copyOfList = values.ToArray();
-                            values.Clear();
-
-                            for (int i = 0; i < copyOfList.Length; ++i)
+                            for (int i = 0; i < values.Count; ++i)
                             {
                                 bool wasChanged;
-                                string value = Resolve(copyOfList[i], fallbackValue, out wasChanged);
-                                values.Add(value);
+                                string value = Resolve(values[i], fallbackValue, out wasChanged);
+                                if (wasChanged)
+                                    values[i] = value;
                             }
 
                             SetResolved(memberPath);
