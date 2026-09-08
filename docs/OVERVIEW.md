@@ -1828,3 +1828,7 @@ class Ubisoft_Confluence : LibrariesProject
 
 }
 ```
+
+### SDK-Style Project Generation
+
+For guidance on producing leaner `.csproj` files using SDK file discovery — including `EnableDefaultItems`, per-type glob control, and property cleanup — see [csharp-sdk-style-csproj-migration.md](csharp-sdk-style-csproj-migration.md).

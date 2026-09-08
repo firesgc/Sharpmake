@@ -536,11 +536,14 @@ namespace Sharpmake
                 Disabled
             }
 
+            // https://learn.microsoft.com/en-us/dotnet/api/microsoft.build.tasks.al.prefer32bit
+            // Unset omits the element and lets MSBuild decide; Enabled/Disabled write true/false explicitly.
             public enum Prefer32Bit
             {
                 Enabled,
+                Disabled,
                 [Default]
-                Disabled
+                Unset
             }
 
             public enum DisableFastUpToDateCheck

@@ -179,9 +179,15 @@ namespace Sharpmake.Generators.VisualStudio
                 {
                     relativeBuildStep.AdditionalInputs.Add(relativeBuildStep.Executable);
                 }
-                // Build the command.
+                
+                // Add "call" prefix for batch files to ensure control returns to MSBuild when there is multiple custom build steps.
+                // msbuild bundles together multiple builds steps in a single .bat. If one of them is a .bat file without "call", the rest of the steps are skipped.
+                string executableExtension = Path.GetExtension(relativeBuildStep.Executable);
+                string callPrefix = executableExtension.Equals(".bat", StringComparison.OrdinalIgnoreCase) ? "call " : "";
+
                 string command = string.Format(
-                    "\"{0}\" {1}",
+                    "{0}\"{1}\" {2}",
+                    callPrefix,
                     relativeBuildStep.Executable,
                     relativeBuildStep.ExecutableArguments
                 );
@@ -1391,6 +1397,7 @@ namespace Sharpmake.Generators.VisualStudio
                 {
                     using (fileGenerator.Resolver.NewScopedParameter("project", context.Project))
                     using (fileGenerator.Resolver.NewScopedParameter("config", config))
+                    using (fileGenerator.Resolver.NewScopedParameter("conf", config))
                     using (fileGenerator.Resolver.NewScopedParameter("target", config.Target))
                     {
                         var customFileBuildSteps = CombineCustomFileBuildSteps(context.ProjectDirectory, fileGenerator.Resolver, config.CustomFileBuildSteps.Where(step => step.Filter != Project.Configuration.CustomFileBuildStep.ProjectFilter.BFFOnly));
@@ -1553,13 +1560,12 @@ namespace Sharpmake.Generators.VisualStudio
             }
 
             // Write None files
-            if (context.Project.NoneFiles.Count > 0)
+            if (NoneFiles.Count > 0)
             {
                 fileGenerator.Write(Template.Project.ProjectFilesBegin);
-                foreach (string file in context.Project.NoneFiles)
+                foreach (var file in NoneFiles)
                 {
-                    var projectFile = new ProjectFile(context, file);
-                    using (fileGenerator.Declare("file", projectFile))
+                    using (fileGenerator.Declare("file", file))
                         fileGenerator.Write(Template.Project.ProjectFilesNone);
                 }
                 fileGenerator.Write(Template.Project.ProjectFilesEnd);

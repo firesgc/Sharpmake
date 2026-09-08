@@ -19,10 +19,6 @@ namespace Sharpmake.Application
                 public Error(string message, params object[] args)
                     : base(string.Format(message, args))
                 { }
-
-                protected Error(SerializationInfo info, StreamingContext context)
-                    : base(info, context)
-                { }
             }
 
             public enum InputType
@@ -50,6 +46,7 @@ namespace Sharpmake.Application
             public bool Diagnostics = false;
             public bool WriteFiles = true;
             public bool DumpDependency = false;
+            public bool LogAllGeneratedSolutions = false;
             private bool _testOptionValid = true;
             internal TestOptions TestOption;
             internal bool RegressionDiff = true;
@@ -100,6 +97,12 @@ namespace Sharpmake.Application
             {
                 Tools.ProjectLogFiles(projectFile);
                 Exit = true;
+            }
+
+            [CommandLine.Option("logAllGeneratedSolutions", "Log all solution files considered and generated to the console: ex: /logAllGeneratedSolutions")]
+            public void CommandLineLogAllGeneratedSolutions()
+            {
+                LogAllGeneratedSolutions = true;
             }
 
             [CommandLine.Option("blobonly", @"Only generate blob and work blob files: ex: /blobonly")]
@@ -359,6 +362,18 @@ ex: /forcecleanup( ""sharpmakeautocleanupdb.bin"" ")]
                 Util.ExecuteFilesAutoCleanup();
 
                 Exit = true;
+            }
+
+            [CommandLine.Option("errorsToStderr", @"Route error output to stderr instead of stdout (warnings remain on stdout): ex: /errorsToStderr")]
+            public void CommandLineErrorsToStderr()
+            {
+                // Validated in the main for priority
+            }
+
+            [CommandLine.Option("prefixAllOutputLines", @"Prefix every line in multi-line warning/error/debug messages, not just the first: ex: /prefixAllOutputLines")]
+            public void CommandLinePrefixAllOutputLines()
+            {
+                // Validated in the main for priority
             }
 
             public void Validate()

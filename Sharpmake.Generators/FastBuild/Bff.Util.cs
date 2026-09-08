@@ -859,9 +859,16 @@ namespace Sharpmake.Generators.FastBuild
                     return relativePath;
             });
 
+            Strings inputFiles = new();
+            inputFiles.Add(relativeBuildStep.KeyInput);
+            foreach (string inputFile in relativeBuildStep.AdditionalInputs)
+            {
+                inputFiles.Add(inputFile);
+            }
+
             using (bffGenerator.Declare("fastBuildPreBuildName", relativeBuildStep.Description))
             using (bffGenerator.Declare("fastBuildPrebuildExeFile", relativeBuildStep.Executable))
-            using (bffGenerator.Declare("fastBuildPreBuildInputFiles", FBuildFormatSingleListItem(relativeBuildStep.KeyInput)))
+            using (bffGenerator.Declare("fastBuildPreBuildInputFiles", FBuildFormatList(inputFiles.ToList(), 26)))
             using (bffGenerator.Declare("fastBuildPreBuildOutputFile", relativeBuildStep.Output))
             using (bffGenerator.Declare("fastBuildPreBuildArguments", string.IsNullOrWhiteSpace(relativeBuildStep.ExecutableArguments) ? FileGeneratorUtilities.RemoveLineTag : relativeBuildStep.ExecutableArguments))
             // This is normally the project directory.
@@ -879,6 +886,7 @@ namespace Sharpmake.Generators.FastBuild
         {
             using (bffGenerator.Resolver.NewScopedParameter("project", project))
             using (bffGenerator.Resolver.NewScopedParameter("config", config))
+            using (bffGenerator.Resolver.NewScopedParameter("conf", config))
             using (bffGenerator.Resolver.NewScopedParameter("target", config.Target))
             {
                 foreach (var customBuildStep in config.CustomFileBuildSteps)

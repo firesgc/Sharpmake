@@ -900,8 +900,30 @@ namespace Sharpmake
                 NoneExtensions.RemoveAll(s => NoneExtensionsCopyIfNewer.Contains(s));
             }
 
+            var extensionContainers = new[]
+            {
+                SourceFilesExtensions,
+                ResourceFilesExtensions,
+                PRIFilesExtensions,
+                NatvisFilesExtensions,
+                NoneExtensions,
+                NoneExtensionsCopyIfNewer,
+                ProtoExtensions
+            };
+
+            // The code below does an expensive glob to get source files, which when generating the
+            // debug project will have to scan a potentially large depot tree and takes a long time
+            // Clear all extensions to not do the file scanning for the debug project.
+            if (this is DebugProject)
+            {
+                foreach (var container in extensionContainers)
+                {
+                    container.Clear();
+                }
+            }
+
             // Only scan directory for files if needed
-            if (SourceFilesExtensions.Count != 0 || ResourceFilesExtensions.Count != 0 || PRIFilesExtensions.Count != 0 || NoneExtensions.Count != 0 || NoneExtensionsCopyIfNewer.Count != 0)
+            if (extensionContainers.Any(container => container.Count != 0))
             {
                 string capitalizedSourceRootPath = Util.GetCapitalizedPath(SourceRootPath);
 
@@ -1912,6 +1934,13 @@ namespace Sharpmake
                 Util.ResolvePath(SourceRootPath, ref SourceFilesExclude);
                 Util.ResolvePath(SourceRootPath, ref SourceFilesBlobExclude);
                 Util.ResolvePath(SourceRootPath, ref SourceFilesBuildExclude);
+                Util.ResolvePath(SourceRootPath, ref PRIFiles);
+                Util.ResolvePath(SourceRootPath, ref ResourceFiles);
+                Util.ResolvePath(SourceRootPath, ref NatvisFiles);
+                Util.ResolvePath(SourceRootPath, ref NoneFiles);
+                Util.ResolvePath(SourceRootPath, ref NoneFilesCopyIfNewer);
+                Util.ResolvePath(SourceRootPath, ref ProtoFiles);
+
                 Util.ResolvePath(SharpmakeCsPath, ref _blobPath);
 
                 if (SourceFilesFilters != null)
@@ -2046,6 +2075,10 @@ namespace Sharpmake
             SourceFilesExtensions.Clear();
             ResourceFilesExtensions.Clear();
             PRIFilesExtensions.Clear();
+            NatvisFilesExtensions.Clear();
+            NoneExtensions.Clear();
+            NoneExtensionsCopyIfNewer.Clear();
+            ProtoExtensions.Clear();
         }
     }
 
@@ -2142,11 +2175,33 @@ namespace Sharpmake
         public FileType FileType = FileType.File;
     }
 
+    public enum CopyToOutputDirectory
+    {
+        Never,
+        Always,
+        PreserveNewest,
+    }
+
+    public enum GlobItemType
+    {
+        Compile,
+        None,
+        Content,
+        EmbeddedResource,
+        Page,
+        Resource,
+    }
+
     [Resolver.Resolvable]
     public class GlobSetting
     {
         public string Include;
         public string Exclude;
+        public string Remove;
+        public string Update;
+        // Only meaningful with Update; null omits the metadata element.
+        public CopyToOutputDirectory? CopyToOutputDirectory;
+        public GlobItemType ItemType = GlobItemType.Compile;
     }
 
     public enum CSharpProjectType
@@ -2334,6 +2389,7 @@ namespace Sharpmake
         public NetCoreSdkTypes NetCoreSdkType = NetCoreSdkTypes.Default;
         public string ResourcesPath = null;
         public string ContentPath = null;
+        public string AppDesignerFolder = "Properties";
         public string BaseIntermediateOutputPath = string.Empty;
         public string ApplicationIcon = string.Empty;
         public string ApplicationManifest = "app.manifest";
@@ -2379,10 +2435,35 @@ namespace Sharpmake
         public bool ExplicitNugetRestoreProjectStyle = false;
 
         /// <summary>
-        /// Enable or disable the property [EnableDefaultItems] in NetCore Project Schema
+        /// Master SDK glob gate. When false all EnableDefault* below are irrelevant.
+        /// Corresponds to &lt;EnableDefaultItems&gt; in the csproj.
         /// </summary>
         public bool EnableDefaultItems { get; set; } = false;
+
+        // Fine-grained per-type SDK glob gates. null = omit the csproj property (SDK default is true).
+        // Only meaningful when EnableDefaultItems = true; the generator derives per-type discovery flags
+        // by ANDing EnableDefaultItems with each of these (treating null as true).
+
+        /// <summary>**/*.cs → Compile. Corresponds to &lt;EnableDefaultCompileItems&gt;.</summary>
+        public bool? EnableDefaultCompileItems { get; set; } = null;
+
+        /// <summary>**/*.resx → EmbeddedResource. Corresponds to &lt;EnableDefaultEmbeddedResourceItems&gt;.</summary>
+        public bool? EnableDefaultEmbeddedResourceItems { get; set; } = null;
+
+        /// <summary>Everything else → None. Corresponds to &lt;EnableDefaultNoneItems&gt;.</summary>
+        public bool? EnableDefaultNoneItems { get; set; } = null;
+
+        /// <summary>**/*.xaml → Page. WPF only. Corresponds to &lt;EnableDefaultPageItems&gt;.</summary>
+        public bool? EnableDefaultPageItems { get; set; } = null;
+
+        /// <summary>App.xaml → ApplicationDefinition (instead of Page). WPF only. Corresponds to &lt;EnableDefaultApplicationDefinition&gt;.</summary>
+        public bool? EnableDefaultApplicationDefinition { get; set; } = null;
+
         public Strings DefaultItemExcludes = new Strings();
+
+        // When true, emit <Project> GUID in <ProjectReference> for SDK-style projects.
+        // Opt in if your IDE requires it for code-navigation (e.g. Rider, RIDER-26499).
+        public bool ForceProjectReferenceGuid = false;
 
         public bool IncludeResxAsResources = true;
         public string RootNamespace;
@@ -2543,15 +2624,35 @@ namespace Sharpmake
         {
             ResourceFiles.AddRange(PublicResourceFiles);
 
+            if (EnableDefaultItems && AllConfigsSdk(ProjectSchema, Configurations))
+            {
+                // The source file scan (SourceFilesExtensions) is intentionally NOT suppressed: the scan
+                // still needs to run so the generator can emit explicit <Compile Link="..."> entries for
+                // out-of-tree files that the SDK cannot auto-discover. In-tree files are gated out in
+                // the generator via !sdkHandlesCompile.
+                // ResourceFilesExtensions is NOT cleared: the generator reads it to emit per-extension globs.
+                // NoneExtensionsCopyIfNewer is NOT cleared: the generator emits <None Update> for these.
+                // NoneExtensions is only cleared when the SDK is actually handling None discovery; a user
+                // can opt out per-type via EnableDefaultNoneItems = false.
+                if (EnableDefaultNoneItems ?? true)
+                    NoneExtensions.Clear();
+                ContentExtension.Clear();
+                PRIFilesExtensions.Clear();
+                NatvisFilesExtensions.Clear();
+                ProtoExtensions.Clear();
+            }
+
             base.ResolveSourceFiles(builder);
 
-            //Getting CorrectCaseVersion
-            if (!string.IsNullOrEmpty(ResourcesPath) && Directory.Exists(ResourcesPath))
+            // ResourcesPath is a dedicated directory scan that collects ALL files in the folder regardless
+            // of extension (binary assets, images, etc. that have no entry in ResourceFilesExtensions).
+            // The ResourceFilesExtensions guard was incorrect — the scan is extension-agnostic by design.
+            if (!EnableDefaultItems && !string.IsNullOrEmpty(ResourcesPath) && Directory.Exists(ResourcesPath))
             {
                 ResolvedResourcesFullFileNames = new Strings(GetDirectoryFiles(new DirectoryInfo(ResourcesPath)).Select(GetCapitalizedFile));
             }
 
-            if (!string.IsNullOrEmpty(ContentPath) && Directory.Exists(ContentPath))
+            if (!EnableDefaultItems && !string.IsNullOrEmpty(ContentPath) && Directory.Exists(ContentPath))
             {
                 ResolvedContentFullFileNames = new Strings(GetDirectoryFiles(new DirectoryInfo(ContentPath)).Select(GetCapitalizedFile));
             }
@@ -2577,6 +2678,31 @@ namespace Sharpmake
                 ResolvedResourcesFullFileNames.Remove(excludeSourceFile);
                 ResolvedContentFullFileNames.Remove(excludeSourceFile);
                 VsctCompileFiles.Remove(excludeSourceFile);
+            }
+
+            // Returns true only when ALL configs on this project are SDK-style. This is intentionally
+            // conservative: ResolveSourceFiles runs once per Project and mutates shared state
+            // (NoneExtensions, ContentExtension, etc.), so we must not clear those lists if ANY config
+            // will generate a non-SDK csproj file that still needs them.
+            //
+            // This means a project where Default-schema configs share a filename but include a mix of
+            // NetFramework and NetCore TFMs (one csproj, multi-target) will currently NOT get the SDK
+            // clearing — even though the generator would treat it as SDK-style via isNetCoreProjectSchema
+            // (which uses Any + Count>1). Fixing that mismatch properly requires deferring the clearing
+            // to per-ProjectFilesMapping resolution rather than project-level. Pre-existing limitation.
+            static bool AllConfigsSdk(CSharpProjectSchema schema, IEnumerable<Configuration> configs)
+            {
+                if (schema == CSharpProjectSchema.NetCore)
+                    return true;
+
+                if (schema == CSharpProjectSchema.NetFramework)
+                    return false;
+
+                return configs.All(c =>
+                {
+                    var fw = c.Target.GetFragment<DotNetFramework>();
+                    return fw.IsDotNetCore() || fw.IsDotNetStandard();
+                });
             }
         }
 

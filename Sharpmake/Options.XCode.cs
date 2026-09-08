@@ -145,6 +145,17 @@ namespace Sharpmake
                     { }
                 }
 
+                /// <summary>
+                /// User defined build settings in Xcode build settings
+                /// Array of string user defined build settings in Xcode build settings { "CUSTOM_SETTING = XYZ", "CUSTOM_SETTING_1 = ABC" }
+                /// </summary>
+                public class CustomBuildSettings : Strings
+                {
+                    public CustomBuildSettings(params string[] settings)
+                        : base(settings)
+                    { }
+                }
+
 
                 public enum EnableGpuFrameCaptureMode
                 {

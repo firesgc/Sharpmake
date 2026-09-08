@@ -15,15 +15,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-2022]
-        framework: [net6.0]
+        framework: [net8.0]
         configuration: [Release]
     uses: ./.github/workflows/build.yml
     with:
       os: ${{ matrix.os }}
       framework: ${{ matrix.framework }}
       configuration: ${{ matrix.configuration }}
-      run_unit_tests: false
-      run_regression_tests: false
+      run_tests: false
 
   release:
     needs: [builds]
@@ -33,7 +32,7 @@ jobs:
 
     steps:
       - name: 'Checkout the repo'
-        uses: actions/checkout@v6.0.1
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
@@ -42,7 +41,7 @@ jobs:
         run: .github\Get-Changelog.ps1 ${{ github.ref_name }} > changelog.md
 
       - name: 'Download workflow artifacts'
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           path: downloads
 
@@ -50,14 +49,14 @@ jobs:
         run: |
           for OS in Linux macOS Windows
           do
-              pushd ./Sharpmake-net6.0-$OS-${{ github.sha }}
-              zip -r ../Sharpmake-net6.0-$OS-${{ github.ref_name }}.zip .
+              pushd ./Sharpmake-net8.0-$OS-${{ github.sha }}
+              zip -r ../Sharpmake-net8.0-$OS-${{ github.ref_name }}.zip .
               popd
           done
         working-directory: downloads
 
       - name: 'Create GitHub release'
-        uses: ncipollo/release-action@v1.20.0
+        uses: ncipollo/release-action@v1.21.0
         with:
           bodyFile: 'changelog.md'
-          artifacts: 'downloads/Sharpmake-net6.0-*-${{ github.ref_name }}.zip'
+          artifacts: 'downloads/Sharpmake-net8.0-*-${{ github.ref_name }}.zip'

@@ -14,8 +14,9 @@ namespace FastBuild
             SourceRootPath = @"[project.SharpmakeCsPath]\codebase";
             SourceFilesExtensions.Add(".bat");
 
-            // need to add it explicitly since it's gonna be generated it doesn't exist yet
+            // need to add generated files explicitly since they don't exist yet
             SourceFiles.Add(@"[project.SourceRootPath]\main.cpp");
+            SourceFiles.Add(@"[project.SourceRootPath]\secondaryfile.cpp");
 
             AddTargets(
                 new Target(
@@ -32,18 +33,31 @@ namespace FastBuild
         [Configure]
         public void ConfigureAll(Configuration conf, Target target)
         {
+            // A simple custom build step that generates main.cpp via a .bat file
             conf.CustomFileBuildSteps.Add(
                 new Configuration.CustomFileBuildStep
                 {
-                    KeyInput = "filegeneration.bat",
+                    KeyInput = "generatemain.bat",
                     Output = "main.cpp",
                     Description = $"Generate main.cpp",
-                    Executable = "filegeneration.bat"
-                }
-            );
+                    Executable = "generatemain.bat"
+                });
+            // Demonstrates a custom file build step that has two inputs and one output
+            conf.CustomFileBuildSteps.Add(
+                new Configuration.CustomFileBuildStep
+                {
+                    KeyInput = "generatesecondaryfile.bat",
+                    Output = "secondaryfile.cpp",
+                    Description = $"Generate secondaryfile.cpp",
+                    Executable = "generatesecondaryfile.bat",
+                    ExecutableArguments = "../codebase/concatenate_file1.in ../codebase/concatenate_file2.in",
+                    AdditionalInputs = { "[project.SourceRootPath]\\concatenate_file1.in", "[project.SourceRootPath]\\concatenate_file2.in" }
+				
+                });
 
             conf.ProjectFileName = "[project.Name]_[target.DevEnv]_[target.Platform]";
             conf.ProjectPath = @"[project.SharpmakeCsPath]\projects";
+            conf.Options.Add(Sharpmake.Options.Vc.General.DebugInformation.C7Compatible);
         }
 
         [Configure(BuildSystem.FastBuild)]
@@ -93,7 +107,7 @@ namespace FastBuild
         public static void SharpmakeMain(Sharpmake.Arguments arguments)
         {
             FastBuildSettings.FastBuildMakeCommand = @"..\..\..\tools\FastBuild\Windows-x64\FBuild.exe";
-            KitsRootPaths.SetUseKitsRootForDevEnv(DevEnv.vs2022, KitsRootEnum.KitsRoot10, Options.Vc.General.WindowsTargetPlatformVersion.v10_0_22621_0);
+            KitsRootPaths.SetUseKitsRootForDevEnv(DevEnv.vs2022, KitsRootEnum.KitsRoot10, Options.Vc.General.WindowsTargetPlatformVersion.v10_0_26100_0);
 
             arguments.Generate<CustomBuildStepSolution>();
         }

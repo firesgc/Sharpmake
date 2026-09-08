@@ -715,6 +715,9 @@ namespace Sharpmake
             Strings ldRunPaths = Options.GetStrings<Options.XCode.Compiler.LdRunPaths>(conf);
             options["LdRunPaths"] = ldRunPaths.Count > 0 ? XCodeUtil.XCodeFormatList(ldRunPaths, 4) : FileGeneratorUtilities.RemoveLineTag;
 
+            Strings customBuildSettings = Options.GetStrings<Options.XCode.Compiler.CustomBuildSettings>(conf);
+            options["CustomBuildSettings"] = customBuildSettings.Count > 0 ? string.Join($";{Environment.NewLine}", customBuildSettings) : FileGeneratorUtilities.RemoveLineTag;
+
             options["AssetCatalogCompilerAppIconName"] = Options.StringOption.Get<Options.XCode.Compiler.AssetCatalogCompilerAppIconName>(conf);
             options["AssetCatalogCompilerLaunchImageName"] = Options.StringOption.Get<Options.XCode.Compiler.AssetCatalogCompilerLaunchImageName>(conf);
             options["AssetCatalogCompilerAlternateAppIconNames"] = XCodeUtil.XCodeFormatList(Options.GetStrings<Options.XCode.Compiler.AssetCatalogCompilerAlternateAppIconNames>(conf), 4);

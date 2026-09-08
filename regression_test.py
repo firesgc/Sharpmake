@@ -157,6 +157,8 @@ def launch_tests():
             #Test("QTFileCustomBuild", "QTFileCustomBuild.sharpmake.cs"), # commented out since output has discrepancies between net472 and net5.0
             Test("SimpleExeLibDependency", "SimpleExeLibDependency.sharpmake.cs"),
             Test("NetCore\\DotNetOSMultiFrameworksHelloWorld", "HelloWorld.sharpmake.cs"),
+            Test("NetCore\\EnableDefaultItemsHelloWorld", "HelloWorld.sharpmake.cs"),
+            Test("NetCore\\EnableDefaultItemsFinegrained", "HelloWorld.sharpmake.cs"),
         ]
 
         # Run each test. Break and exit on error.

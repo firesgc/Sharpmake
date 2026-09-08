@@ -55,6 +55,10 @@ call :UpdateRef samples NetCore\DotNetMultiFrameworksHelloWorld  HelloWorld.shar
 if not "%ERRORLEVEL_BACKUP%" == "0" goto error
 call :UpdateRef samples NetCore\DotNetOSMultiFrameworksHelloWorld  HelloWorld.sharpmake.cs     reference         NetCore\DotNetOSMultiFrameworksHelloWorld
 if not "%ERRORLEVEL_BACKUP%" == "0" goto error
+call :UpdateRef samples NetCore\EnableDefaultItemsHelloWorld       HelloWorld.sharpmake.cs     reference         NetCore\EnableDefaultItemsHelloWorld
+if not "%ERRORLEVEL_BACKUP%" == "0" goto error
+call :UpdateRef samples NetCore\EnableDefaultItemsFinegrained      HelloWorld.sharpmake.cs     reference         NetCore\EnableDefaultItemsFinegrained
+if not "%ERRORLEVEL_BACKUP%" == "0" goto error
 
 :: functional tests
 :: Skipped in regression tests
